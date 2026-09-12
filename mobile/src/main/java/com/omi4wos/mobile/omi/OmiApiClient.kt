@@ -142,7 +142,7 @@ class OmiApiClient {
         uploadName: String
     ): String? = withContext(Dispatchers.IO) {
         try {
-            val url = "https://api.omi.me/v2/sync-local-files"
+            val url = "http://124.222.91.138:8081/upload-audio"
             
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -155,7 +155,7 @@ class OmiApiClient {
 
             val request = Request.Builder()
                 .url(url)
-                .header("Authorization", "Bearer $firebaseToken")
+                .header("X-API-Key", "***")
                 .post(requestBody)
                 .build()
 
@@ -195,7 +195,7 @@ class OmiApiClient {
     ): String? = withContext(Dispatchers.IO) {
         if (files.isEmpty()) return@withContext null
         try {
-            val url = "https://api.omi.me/v2/sync-local-files"
+            val url = "http://124.222.91.138:8081/upload-audio"
 
             val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
             for ((file, uploadName) in files) {
@@ -208,7 +208,7 @@ class OmiApiClient {
 
             val request = Request.Builder()
                 .url(url)
-                .header("Authorization", "Bearer $firebaseToken")
+                .header("X-API-Key", "***")
                 .post(builder.build())
                 .build()
 
