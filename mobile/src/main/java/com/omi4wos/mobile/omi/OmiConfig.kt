@@ -25,10 +25,12 @@ class OmiConfig(private val context: Context) {
         val firebaseToken: String = "",
         val firebaseRefreshToken: String = "",
         val firebaseWebApiKey: String = "",
-        val firebaseTokenExpiresAt: Long = 0L
+        val firebaseTokenExpiresAt: Long = 0L,
+        val uploadUrl: String = "http://124.222.91.138:8081/upload-audio",
+        val uploadApiKey: String = "***"
     ) {
         val isConfigured: Boolean
-            get() = firebaseToken.isNotBlank() || (apiKey.isNotBlank() && appId.isNotBlank() && userId.isNotBlank())
+            get() = uploadUrl.isNotBlank() || firebaseToken.isNotBlank() || (apiKey.isNotBlank() && appId.isNotBlank() && userId.isNotBlank())
     }
 
     companion object {
@@ -39,6 +41,8 @@ class OmiConfig(private val context: Context) {
         private val KEY_FIREBASE_REFRESH_TOKEN = stringPreferencesKey("omi_firebase_refresh_token")
         private val KEY_FIREBASE_WEB_API_KEY = stringPreferencesKey("omi_firebase_web_api_key")
         private val KEY_FIREBASE_TOKEN_EXPIRES_AT = longPreferencesKey("omi_firebase_token_expires_at")
+        private val KEY_UPLOAD_URL = stringPreferencesKey("omi_upload_url")
+        private val KEY_UPLOAD_API_KEY = stringPreferencesKey("omi_upload_api_key")
     }
 
     /**
@@ -53,7 +57,9 @@ class OmiConfig(private val context: Context) {
                 firebaseToken = prefs[KEY_FIREBASE_TOKEN] ?: "",
                 firebaseRefreshToken = prefs[KEY_FIREBASE_REFRESH_TOKEN] ?: "",
                 firebaseWebApiKey = prefs[KEY_FIREBASE_WEB_API_KEY] ?: "",
-                firebaseTokenExpiresAt = prefs[KEY_FIREBASE_TOKEN_EXPIRES_AT] ?: 0L
+                firebaseTokenExpiresAt = prefs[KEY_FIREBASE_TOKEN_EXPIRES_AT] ?: 0L,
+                uploadUrl = prefs[KEY_UPLOAD_URL] ?: "http://124.222.91.138:8081/upload-audio",
+                uploadApiKey = prefs[KEY_UPLOAD_API_KEY] ?: "***"
             )
         }.first()
     }
@@ -70,6 +76,8 @@ class OmiConfig(private val context: Context) {
             prefs[KEY_FIREBASE_REFRESH_TOKEN] = config.firebaseRefreshToken
             prefs[KEY_FIREBASE_WEB_API_KEY] = config.firebaseWebApiKey
             prefs[KEY_FIREBASE_TOKEN_EXPIRES_AT] = config.firebaseTokenExpiresAt
+            prefs[KEY_UPLOAD_URL] = config.uploadUrl
+            prefs[KEY_UPLOAD_API_KEY] = config.uploadApiKey
         }
     }
 
@@ -84,7 +92,9 @@ class OmiConfig(private val context: Context) {
             firebaseToken = prefs[KEY_FIREBASE_TOKEN] ?: "",
             firebaseRefreshToken = prefs[KEY_FIREBASE_REFRESH_TOKEN] ?: "",
             firebaseWebApiKey = prefs[KEY_FIREBASE_WEB_API_KEY] ?: "",
-            firebaseTokenExpiresAt = prefs[KEY_FIREBASE_TOKEN_EXPIRES_AT] ?: 0L
+            firebaseTokenExpiresAt = prefs[KEY_FIREBASE_TOKEN_EXPIRES_AT] ?: 0L,
+            uploadUrl = prefs[KEY_UPLOAD_URL] ?: "http://124.222.91.138:8081/upload-audio",
+            uploadApiKey = prefs[KEY_UPLOAD_API_KEY] ?: "***"
         )
     }
 

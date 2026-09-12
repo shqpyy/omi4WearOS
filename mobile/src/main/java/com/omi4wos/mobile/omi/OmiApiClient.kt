@@ -142,8 +142,9 @@ class OmiApiClient {
         uploadName: String
     ): String? = withContext(Dispatchers.IO) {
         try {
-            val url = "http://124.222.91.138:8081/upload-audio"
-            
+            val url = omiConfig.getConfig().uploadUrl.ifBlank { "http://124.222.91.138:8081/upload-audio" }
+            val apiKey = omiConfig.getConfig().uploadApiKey
+
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart(
@@ -153,11 +154,13 @@ class OmiApiClient {
                 )
                 .build()
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url(url)
-                .header("X-API-Key", "***")
                 .post(requestBody)
-                .build()
+            if (apiKey.isNotBlank()) {
+                requestBuilder.header("X-API-Key", apiKey)
+            }
+            val request = requestBuilder.build()
 
             Log.d(TAG, "Uploading raw .bin to Omi: $uploadName (${binFile.length()} bytes)")
 
@@ -195,7 +198,8 @@ class OmiApiClient {
     ): String? = withContext(Dispatchers.IO) {
         if (files.isEmpty()) return@withContext null
         try {
-            val url = "http://124.222.91.138:8081/upload-audio"
+            val url = omiConfig.getConfig().uploadUrl.ifBlank { "http://124.222.91.138:8081/upload-audio" }
+            val apiKey = omiConfig.getConfig().uploadApiKey
 
             val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
             for ((file, uploadName) in files) {
@@ -206,11 +210,13 @@ class OmiApiClient {
                 )
             }
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url(url)
-                .header("X-API-Key", "***")
                 .post(builder.build())
-                .build()
+            if (apiKey.isNotBlank()) {
+                requestBuilder.header("X-API-Key", apiKey)
+            }
+            val request = requestBuilder.build()
 
             Log.d(TAG, "Batch uploading ${files.size} .bin file(s) to Omi")
 

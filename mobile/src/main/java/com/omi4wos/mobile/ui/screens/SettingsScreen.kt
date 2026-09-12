@@ -148,6 +148,28 @@ fun SettingsScreen(
                 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                OutlinedTextField(
+                    value = uiState.uploadUrl,
+                    onValueChange = { viewModel.updateUploadUrl(it) },
+                    label = { Text("Upload URL") },
+                    placeholder = { Text("http://your-server:8080/upload-audio") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = uiState.uploadApiKey,
+                    onValueChange = { viewModel.updateUploadApiKey(it) },
+                    label = { Text("Upload API Key") },
+                    placeholder = { Text("x-api-key value") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Button(
                     onClick = {
                         viewModel.saveSettings()

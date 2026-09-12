@@ -15,6 +15,8 @@ data class SettingsUiState(
     val firebaseToken: String = "",
     val firebaseRefreshToken: String = "",
     val firebaseWebApiKey: String = "",
+    val uploadUrl: String = "http://124.222.91.138:8081/upload-audio",
+    val uploadApiKey: String = "***",
     val isSaving: Boolean = false,
     val saveSuccess: Boolean? = null
 )
@@ -39,7 +41,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 userId = config.userId,
                 firebaseToken = config.firebaseToken,
                 firebaseRefreshToken = config.firebaseRefreshToken,
-                firebaseWebApiKey = config.firebaseWebApiKey
+                firebaseWebApiKey = config.firebaseWebApiKey,
+                uploadUrl = config.uploadUrl,
+                uploadApiKey = config.uploadApiKey
             )
         }
     }
@@ -68,6 +72,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _uiState.value = _uiState.value.copy(firebaseWebApiKey = value)
     }
 
+    fun updateUploadUrl(value: String) {
+        _uiState.value = _uiState.value.copy(uploadUrl = value)
+    }
+
+    fun updateUploadApiKey(value: String) {
+        _uiState.value = _uiState.value.copy(uploadApiKey = value)
+    }
+
     fun saveSettings() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSaving = true)
@@ -82,7 +94,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         firebaseToken = state.firebaseToken,
                         firebaseRefreshToken = state.firebaseRefreshToken,
                         firebaseWebApiKey = state.firebaseWebApiKey,
-                        firebaseTokenExpiresAt = existingConfig.firebaseTokenExpiresAt // Preserve expiry tracking
+                        firebaseTokenExpiresAt = existingConfig.firebaseTokenExpiresAt, // Preserve expiry tracking
+                        uploadUrl = state.uploadUrl,
+                        uploadApiKey = state.uploadApiKey
                     )
                 )
                 _uiState.value = _uiState.value.copy(
