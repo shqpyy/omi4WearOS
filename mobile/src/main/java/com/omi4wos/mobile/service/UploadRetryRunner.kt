@@ -21,8 +21,8 @@ import java.io.File
 suspend fun runUploadRetry(context: Context): Boolean {
     val tag = "UploadRetryRunner"
     val repository = UploadRepository.getInstance(context)
-    val apiClient = OmiApiClient()
     val config = OmiConfig(context)
+    val apiClient = OmiApiClient(config)
     val cacheDir = File(context.cacheDir, "speech_audio")
 
     val pending = repository.getPendingUploads()
