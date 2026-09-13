@@ -94,16 +94,13 @@ class AudioUploadService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var repository: UploadRepository
     private lateinit var omiClient: OmiApiClient
-    private lateinit var omiConfig: OmiConfig
-
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         repository = UploadRepository.getInstance(applicationContext)
-        omiConfig = OmiConfig(applicationContext)
-        omiClient = OmiApiClient()
+        omiClient = OmiApiClient(OmiConfig(applicationContext))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
