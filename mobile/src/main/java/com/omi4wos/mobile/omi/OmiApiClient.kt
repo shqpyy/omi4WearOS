@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
  * Uploads transcripts as conversations via:
  *   POST /v2/integrations/{app_id}/user/conversations?uid={user_id}
  */
-class OmiApiClient {
+class OmiApiClient(private val omiConfig: OmiConfig) {
 
     companion object {
         private const val TAG = "OmiApiClient"
