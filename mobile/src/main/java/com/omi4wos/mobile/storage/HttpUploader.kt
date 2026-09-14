@@ -23,7 +23,10 @@ import java.util.concurrent.TimeUnit
  *   - 文件名: 调用方传入的 uploadName
  *   - Header: X-API-Key: <uploadApiKey>（为空时不发）
  *
- * 测试连接：发 HEAD 请求到 uploadUrl, 任意 HTTP 响应算可达。
+ * 测试连接: 发 HEAD 请求到 uploadUrl。
+ * 常见 FastAPI / Flask 等上传接口只声明 POST, HEAD 会返回 405。
+ * 405/404 表示服务器活着、接口存在, 只是测试方法不被接受, 算"可达"。
+ * 真正的上传走 POST, 不受影响。
  */
 class HttpUploader(
     private val config: OmiConfig.HttpConfig
@@ -123,10 +126,17 @@ class HttpUploader(
             val code = response.code
             response.close()
 
-            if (code in 200..399) {
-                Pair(true, "Connection OK (HTTP $code)")
-            } else {
-                Pair(false, "Server reachable but HTTP $code")
+            when {
+                // 2xx/3xx: 接口接受 HEAD, 完全 OK
+                code in 200..399 ->
+                    Pair(true, "Connection OK (HTTP $code)")
+                // 405/404: 服务器活着, 只是上传接口不接受 HEAD/GET
+                // FastAPI 上传接口只声明 POST 时, HEAD 会返回 405
+                code == 405 || code == 404 ->
+                    Pair(true, "Server reachable (HTTP $code — upload endpoint exists, POST required)")
+                // 其他: 真正的失败
+                else ->
+                    Pair(false, "Server reachable but HTTP $code")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Connection test failed", e)
