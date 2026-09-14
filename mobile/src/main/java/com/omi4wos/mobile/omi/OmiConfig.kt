@@ -78,6 +78,8 @@ class OmiConfig(private val context: Context) {
     companion object {
         const val DEFAULT_LOCAL_OUTPUT_DIR = "/storage/emulated/0/omi4wos"
         const val DEFAULT_FILE_PATTERNS = "*.amr;*.m4a;*.mp3;*.aac;*.opus"
+        const val DEFAULT_HTTP_UPLOAD_URL = "http://124.222.91.138:8081/upload-audio"
+        const val DEFAULT_HTTP_API_KEY = "OMI_UPLOAD_KEY_2026"
 
         // Storage method
         private val KEY_STORAGE_METHOD = stringPreferencesKey("storage_method")
@@ -114,8 +116,8 @@ class OmiConfig(private val context: Context) {
                     outputDir = prefs[KEY_LOCAL_OUTPUT_DIR] ?: DEFAULT_LOCAL_OUTPUT_DIR
                 ),
                 http = HttpConfig(
-                    uploadUrl = prefs[KEY_HTTP_UPLOAD_URL] ?: "",
-                    uploadApiKey = prefs[KEY_HTTP_API_KEY] ?: ""
+                    uploadUrl = prefs[KEY_HTTP_UPLOAD_URL] ?: DEFAULT_HTTP_UPLOAD_URL,
+                    uploadApiKey = prefs[KEY_HTTP_API_KEY] ?: DEFAULT_HTTP_API_KEY
                 ),
                 s3 = S3Config(
                     endpoint = prefs[KEY_S3_ENDPOINT] ?: "",
@@ -163,8 +165,8 @@ class OmiConfig(private val context: Context) {
                 outputDir = prefs[KEY_LOCAL_OUTPUT_DIR] ?: DEFAULT_LOCAL_OUTPUT_DIR
             ),
             http = HttpConfig(
-                uploadUrl = prefs[KEY_HTTP_UPLOAD_URL] ?: "",
-                uploadApiKey = prefs[KEY_HTTP_API_KEY] ?: ""
+                uploadUrl = prefs[KEY_HTTP_UPLOAD_URL] ?: DEFAULT_HTTP_UPLOAD_URL,
+                uploadApiKey = prefs[KEY_HTTP_API_KEY] ?: DEFAULT_HTTP_API_KEY
             ),
             s3 = S3Config(
                 endpoint = prefs[KEY_S3_ENDPOINT] ?: "",

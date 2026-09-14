@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
  * 上传格式：
  *   - Method: POST
  *   - Content-Type: multipart/form-data
- *   - 字段名: files
+ *   - 字段名: file
  *   - 文件名: 调用方传入的 uploadName
  *   - Header: X-API-Key: <uploadApiKey>（为空时不发）
  *
@@ -69,7 +69,7 @@ class HttpUploader(
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart(
-                    "files",
+                    "file",
                     uploadName,
                     binFile.asRequestBody("application/octet-stream".toMediaType())
                 )
