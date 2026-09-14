@@ -30,6 +30,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.ui.res.stringResource
+import com.omi4wos.mobile.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -513,7 +514,7 @@ private fun KeepAliveCard(
                     if (activity != null) {
                         BatteryOptimizationHelper.requestIgnoreBatteryOptimizations(activity)
                     } else {
-                        scope.launch { snackbarHostState.showSnackbar(stringResource(R.string.phone_watcher_saf_hint)) }
+                        scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.phone_watcher_saf_hint)) }
                     }
                 },
                 enabled = !isWhitelisted,
@@ -535,7 +536,7 @@ private fun KeepAliveCard(
                             .setData(Uri.parse("package:${context.packageName}"))
                     runCatching { context.startActivity(intent) }
                         .onFailure {
-                            scope.launch { snackbarHostState.showSnackbar("Cannot open: ${it.message}") }
+                            scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.test_fail, it.message)) }
                         }
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -611,4 +612,5 @@ private fun ConfigCard(
         }
     }
 }
+
 
