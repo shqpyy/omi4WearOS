@@ -56,7 +56,6 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
 
     // SAF 选目录启动器
     val pickDirLauncher = rememberLauncherForActivityResult(
@@ -200,6 +199,7 @@ private fun StorageMethodCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
     onMethodSelected: (OmiConfig.StorageMethod) -> Unit
 ) {
+            val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -247,6 +247,7 @@ private fun LocalFileConfigCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
     onOutputDirChange: (String) -> Unit
 ) {
+            val context = LocalContext.current
     ConfigCard(title = context.getString(R.string.local_config_title)) {
         OutlinedTextField(
             value = uiState.localOutputDir,
@@ -271,6 +272,7 @@ private fun HttpConfigCard(
     onUrlChange: (String) -> Unit,
     onKeyChange: (String) -> Unit
 ) {
+            val context = LocalContext.current
     ConfigCard(title = context.getString(R.string.http_config_title)) {
         OutlinedTextField(
             value = uiState.httpUploadUrl,
@@ -309,6 +311,7 @@ private fun S3ConfigCard(
     onSecretKeyChange: (String) -> Unit,
     onRegionChange: (String) -> Unit
 ) {
+            val context = LocalContext.current
     ConfigCard(title = context.getString(R.string.s3_config_title)) {
         Text(
             text = "Works with: Tencent COS / Cloudflare R2 / AWS S3 / MinIO / Aliyun OSS / Backblaze B2.",
@@ -374,7 +377,7 @@ private fun PhoneWatcherCard(
     onPatternsChange: (String) -> Unit,
     onIntervalChange: (Int) -> Unit
 ) {
-    val context = LocalContext.current
+            val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -486,6 +489,7 @@ private fun KeepAliveCard(
     context: android.content.Context,
     snackbarHostState: SnackbarHostState
 ) {
+            val context = LocalContext.current
     val scope = rememberCoroutineScope()
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -565,6 +569,7 @@ private fun KeepAliveCard(
 
 @Composable
 private fun AboutCard() {
+            val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -596,6 +601,7 @@ private fun ConfigCard(
     title: String,
     content: @Composable () -> Unit
 ) {
+            val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
