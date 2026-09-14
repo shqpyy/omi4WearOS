@@ -374,6 +374,7 @@ private fun PhoneWatcherCard(
     onPatternsChange: (String) -> Unit,
     onIntervalChange: (Int) -> Unit
 ) {
+    val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
