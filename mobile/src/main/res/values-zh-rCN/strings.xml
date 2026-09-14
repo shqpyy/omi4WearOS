@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App -->
+    <string name="app_name">omi4wOS 伴侣</string>
+
+    <!-- Notifications -->
+    <string name="notification_channel_name">音频接收</string>
+    <string name="notification_channel_description">接收手表音频用于上传</string>
+    <string name="notification_title">omi4wOS 伴侣</string>
+    <string name="notification_text_idle">等待手表音频…</string>
+    <string name="notification_text_transcribing">正在处理音频…</string>
+    <string name="notification_text_watcher">监听手机音频中…</string>
+
+    <!-- Navigation -->
+    <string name="tab_home">首页</string>
+    <string name="tab_settings">设置</string>
+    <string name="tab_about">关于</string>
+
+    <!-- Home -->
+    <string name="home_title">omi4wOS</string>
+    <string name="watch_connected">手表已连接</string>
+    <string name="watch_disconnected">手表未连接</string>
+    <string name="no_transcripts">暂无记录</string>
+
+    <!-- Settings: Storage Method -->
+    <string name="settings_title">设置</string>
+    <string name="storage_method">存储方式</string>
+    <string name="storage_hint">随时切换方式，其他方式的配置会保留。</string>
+    <string name="storage_local">本地文件（默认）</string>
+    <string name="storage_http">自定义 HTTP 服务器</string>
+    <string name="storage_s3">S3 兼容对象存储</string>
+
+    <!-- Settings: Local File -->
+    <string name="local_config_title">本地文件配置</string>
+    <string name="local_output_dir">输出目录</string>
+    <string name="local_files_hint">文件格式：audio/YYYYMMDD/segment_XXXX.ext + segments.jsonl 元数据。</string>
+
+    <!-- Settings: HTTP -->
+    <string name="http_config_title">HTTP 服务器配置</string>
+    <string name="http_upload_url">上传地址</string>
+    <string name="http_upload_url_hint">http://你的服务器:8080/upload-audio</string>
+    <string name="http_api_key">API Key（可选，通过 X-API-Key 发送）</string>
+
+    <!-- Settings: S3 -->
+    <string name="s3_config_title">S3 存储配置</string>
+    <string name="s3_endpoint">端点</string>
+    <string name="s3_endpoint_hint">cos.ap-shanghai.myqcloud.com 或 s3.amazonaws.com</string>
+    <string name="s3_bucket">存储桶名称</string>
+    <string name="s3_access_key">访问密钥 (Access Key)</string>
+    <string name="s3_secret_key">秘密密钥 (Secret Key)</string>
+    <string name="s3_region">区域（可选）</string>
+    <string name="s3_region_hint">us-east-1 / ap-shanghai / 留空使用路径风格</string>
+
+    <!-- Settings: Buttons -->
+    <string name="test_connection">测试连接</string>
+    <string name="testing">测试中…</string>
+    <string name="save">保存</string>
+    <string name="saving">保存中…</string>
+    <string name="saved">已保存</string>
+
+    <!-- Settings: Phone Recording Watcher -->
+    <string name="phone_watcher_title">通话录音监听</string>
+    <string name="phone_watcher_desc">监听指定目录下的通话录音/音频文件，自动上传。</string>
+    <string name="phone_watcher_pick">选择目录</string>
+    <string name="phone_watcher_or_path">或手动输入路径（优先级低于 SAF）</string>
+    <string name="phone_watcher_dir">监听目录路径</string>
+    <string name="phone_watcher_patterns">文件扩展名（分号分隔）</string>
+    <string name="phone_watcher_interval">扫描间隔（秒，15–3600）</string>
+    <string name="phone_watcher_saf_hint">在 App 内打开此页面授权</string>
+
+    <!-- Settings: Keep-Alive -->
+    <string name="keepalive_title">保活设置</string>
+    <string name="keepalive_desc">Android 会激进地杀掉后台服务。要 24/7 监听，请把本 App 加入白名单并关闭电池优化。</string>
+    <string name="keepalive_whitelist_granted">✓ 电池优化白名单已授予</string>
+    <string name="keepalive_whitelist_grant">授予电池白名单</string>
+    <string name="keepalive_autostart">打开 {0} 自启动设置</string>
+    <string name="keepalive_appinfo">打开应用信息（电池、存储、权限）</string>
+
+    <!-- Settings: About -->
+    <string name="about_title">关于</string>
+    <string name="about_version">omi4wOS 伴侣 V1.11.0（多存储版）</string>
+    <string name="about_adapted">改编自 https://github.com/neurocis/omi4wos</string>
+
+    <!-- Test result -->
+    <string name="test_success">连接成功</string>
+    <string name="test_fail">连接失败：{0}</string>
+    <string name="test_not_configured">请先配置存储方式</string>
+</resources>

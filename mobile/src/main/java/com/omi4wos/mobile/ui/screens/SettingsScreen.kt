@@ -1,4 +1,4 @@
-package com.omi4wos.mobile.ui.screens
+﻿package com.omi4wos.mobile.ui.screens
 
 import android.app.Activity
 import android.content.Intent
@@ -29,6 +29,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -133,21 +134,21 @@ fun SettingsScreen(
                 enabled = !uiState.isTesting,
                 modifier = Modifier.weight(1f)
             ) {
-                Text(if (uiState.isTesting) "Testing..." else "Test Connection")
+                Text(if (uiState.isTesting) stringResource(R.string.testing) else stringResource(R.string.test_connection))
             }
             Button(
                 onClick = {
                     viewModel.saveSettings()
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            if (uiState.saveSuccess == true) "Saved" else "Saving..."
+                            if (uiState.saveSuccess == true) stringResource(R.string.saved) else stringResource(R.string.saving)
                         )
                     }
                 },
                 enabled = !uiState.isSaving,
                 modifier = Modifier.weight(1f)
             ) {
-                Text(if (uiState.isSaving) "Saving..." else "Save")
+                Text(if (uiState.isSaving) stringResource(R.string.saving) else stringResource(R.string.save))
             }
         }
 
@@ -206,7 +207,7 @@ private fun StorageMethodCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Storage Method",
+                text = stringResource(R.string.storage_method),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -222,9 +223,9 @@ private fun StorageMethodCard(
                     )
                     Text(
                         text = when (method) {
-                            OmiConfig.StorageMethod.LOCAL_FILE -> "Local File (default)"
-                            OmiConfig.StorageMethod.HTTP -> "Custom HTTP Server"
-                            OmiConfig.StorageMethod.S3 -> "S3-Compatible Object Storage"
+                            OmiConfig.StorageMethod.LOCAL_FILE -> stringResource(R.string.storage_local)
+                            OmiConfig.StorageMethod.HTTP -> stringResource(R.string.storage_http)
+                            OmiConfig.StorageMethod.S3 -> stringResource(R.string.storage_s3)
                         },
                         modifier = Modifier.padding(start = 8.dp)
                     )
@@ -245,18 +246,18 @@ private fun LocalFileConfigCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
     onOutputDirChange: (String) -> Unit
 ) {
-    ConfigCard(title = "Local File Configuration") {
+    ConfigCard(title = stringResource(R.string.local_config_title)) {
         OutlinedTextField(
             value = uiState.localOutputDir,
             onValueChange = onOutputDirChange,
-            label = { Text("Output Directory") },
+            label = { Text(stringResource(R.string.local_output_dir)) },
             placeholder = { Text("/storage/emulated/0/omi4wos") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Files: <dir>/audio/YYYYMMDD/segment_XXXX.<ext> + segments.jsonl metadata.",
+            text = stringResource(R.string.local_files_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -269,12 +270,12 @@ private fun HttpConfigCard(
     onUrlChange: (String) -> Unit,
     onKeyChange: (String) -> Unit
 ) {
-    ConfigCard(title = "HTTP Server Configuration") {
+    ConfigCard(title = stringResource(R.string.http_config_title)) {
         OutlinedTextField(
             value = uiState.httpUploadUrl,
             onValueChange = onUrlChange,
-            label = { Text("Upload URL") },
-            placeholder = { Text("http://your-server:8080/upload-audio") },
+            label = { Text(stringResource(R.string.http_upload_url)) },
+            placeholder = { Text(stringResource(R.string.http_upload_url_hint)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
@@ -283,7 +284,7 @@ private fun HttpConfigCard(
         OutlinedTextField(
             value = uiState.httpApiKey,
             onValueChange = onKeyChange,
-            label = { Text("API Key (optional, sent as X-API-Key)") },
+            label = { Text(stringResource(R.string.http_api_key)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
@@ -307,7 +308,7 @@ private fun S3ConfigCard(
     onSecretKeyChange: (String) -> Unit,
     onRegionChange: (String) -> Unit
 ) {
-    ConfigCard(title = "S3-Compatible Storage Configuration") {
+    ConfigCard(title = stringResource(R.string.s3_config_title)) {
         Text(
             text = "Works with: Tencent COS / Cloudflare R2 / AWS S3 / MinIO / Aliyun OSS / Backblaze B2.",
             style = MaterialTheme.typography.bodySmall,
@@ -317,8 +318,8 @@ private fun S3ConfigCard(
         OutlinedTextField(
             value = uiState.s3Endpoint,
             onValueChange = onEndpointChange,
-            label = { Text("Endpoint") },
-            placeholder = { Text("cos.ap-shanghai.myqcloud.com or s3.amazonaws.com") },
+            label = { Text(stringResource(R.string.s3_endpoint)) },
+            placeholder = { Text(stringResource(R.string.s3_endpoint_hint)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -326,7 +327,7 @@ private fun S3ConfigCard(
         OutlinedTextField(
             value = uiState.s3Bucket,
             onValueChange = onBucketChange,
-            label = { Text("Bucket Name") },
+            label = { Text(stringResource(R.string.s3_bucket)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -334,7 +335,7 @@ private fun S3ConfigCard(
         OutlinedTextField(
             value = uiState.s3AccessKey,
             onValueChange = onAccessKeyChange,
-            label = { Text("Access Key") },
+            label = { Text(stringResource(R.string.s3_access_key)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
@@ -344,7 +345,7 @@ private fun S3ConfigCard(
         OutlinedTextField(
             value = uiState.s3SecretKey,
             onValueChange = onSecretKeyChange,
-            label = { Text("Secret Key") },
+            label = { Text(stringResource(R.string.s3_secret_key)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
@@ -354,8 +355,8 @@ private fun S3ConfigCard(
         OutlinedTextField(
             value = uiState.s3Region,
             onValueChange = onRegionChange,
-            label = { Text("Region (optional)") },
-            placeholder = { Text("us-east-1 / ap-shanghai / empty for path-style") },
+            label = { Text(stringResource(R.string.s3_region)) },
+            placeholder = { Text(stringResource(R.string.s3_region_hint)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -384,7 +385,7 @@ private fun PhoneWatcherCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Phone Recording Watcher",
+                    text = stringResource(R.string.phone_watcher_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
@@ -396,7 +397,7 @@ private fun PhoneWatcherCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Watch a directory for new call recordings / audio files and upload them automatically.",
+                text = stringResource(R.string.phone_watcher_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -418,7 +419,7 @@ private fun PhoneWatcherCard(
                         onClick = onPickDir,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text(if (uiState.phoneWatchTreeUri.isEmpty()) "Pick Directory" else "Picked ✓")
+                        Text(if (uiState.phoneWatchTreeUri.isEmpty()) stringResource(R.string.phone_watcher_pick) else "Picked ✓")
                     }
                     if (uiState.phoneWatchTreeUri.isNotEmpty()) {
                         OutlinedButton(onClick = onClearTreeUri) {
@@ -438,7 +439,7 @@ private fun PhoneWatcherCard(
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Or enter path manually (lower priority than SAF)",
+                    text = stringResource(R.string.phone_watcher_or_path),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -446,7 +447,7 @@ private fun PhoneWatcherCard(
                 OutlinedTextField(
                     value = uiState.phoneWatchDir,
                     onValueChange = onDirChange,
-                    label = { Text("Watch Directory Path") },
+                    label = { Text(stringResource(R.string.phone_watcher_dir)) },
                     placeholder = { Text("/sdcard/Record/CallRecord/") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -456,7 +457,7 @@ private fun PhoneWatcherCard(
                 OutlinedTextField(
                     value = uiState.phoneWatchPatterns,
                     onValueChange = onPatternsChange,
-                    label = { Text("File Patterns (semicolon-separated)") },
+                    label = { Text(stringResource(R.string.phone_watcher_patterns)) },
                     placeholder = { Text("*.amr;*.m4a;*.mp3;*.aac;*.opus") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -468,7 +469,7 @@ private fun PhoneWatcherCard(
                     onValueChange = { v ->
                         v.toIntOrNull()?.let { onIntervalChange(it) }
                     },
-                    label = { Text("Scan Interval (seconds, 15–3600)") },
+                    label = { Text(stringResource(R.string.phone_watcher_interval)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
@@ -492,13 +493,13 @@ private fun KeepAliveCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Keep-Alive Settings",
+                text = stringResource(R.string.keepalive_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Android aggressively kills background services. For 24/7 recording watcher, whitelist this app and disable battery optimization.",
+                text = stringResource(R.string.keepalive_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -512,13 +513,13 @@ private fun KeepAliveCard(
                     if (activity != null) {
                         BatteryOptimizationHelper.requestIgnoreBatteryOptimizations(activity)
                     } else {
-                        scope.launch { snackbarHostState.showSnackbar("Open this page from the app to grant permission") }
+                        scope.launch { snackbarHostState.showSnackbar(stringResource(R.string.phone_watcher_saf_hint)) }
                     }
                 },
                 enabled = !isWhitelisted,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (isWhitelisted) "✓ Battery optimized whitelist granted" else "Grant battery whitelist")
+                Text(if (isWhitelisted) stringResource(R.string.keepalive_whitelist_granted) else stringResource(R.string.keepalive_whitelist_grant))
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -527,19 +528,20 @@ private fun KeepAliveCard(
             val autoStartIntent = remember(context) {
                 BatteryOptimizationHelper.getManufacturerAutoStartIntent(context)
             }
-            if (autoStartIntent != null) {
-                OutlinedButton(
-                    onClick = {
-                        runCatching { context.startActivity(autoStartIntent) }
-                            .onFailure {
-                                scope.launch { snackbarHostState.showSnackbar("Cannot open: ${it.message}") }
-                            }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    val mfr = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
-                    Text("Open $mfr auto-start settings")
-                }
+            OutlinedButton(
+                onClick = {
+                    val intent = autoStartIntent
+                        ?: Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                            .setData(Uri.parse("package:${context.packageName}"))
+                    runCatching { context.startActivity(intent) }
+                        .onFailure {
+                            scope.launch { snackbarHostState.showSnackbar("Cannot open: ${it.message}") }
+                        }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val mfr = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+                Text(stringResource(R.string.keepalive_autostart, mfr))
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -553,7 +555,7 @@ private fun KeepAliveCard(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Open app info (battery, storage, permissions)")
+                Text(stringResource(R.string.keepalive_appinfo))
             }
         }
     }
@@ -569,17 +571,17 @@ private fun AboutCard() {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "About",
+                text = stringResource(R.string.about_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "omi4wOS Companion V1.11.0 (multi-storage edition)",
+                text = stringResource(R.string.about_version),
                 style = MaterialTheme.typography.bodyMedium
             )
             Text(
-                text = "Adapted from https://github.com/neurocis/omi4wos",
+                text = stringResource(R.string.about_adapted),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -609,3 +611,4 @@ private fun ConfigCard(
         }
     }
 }
+
