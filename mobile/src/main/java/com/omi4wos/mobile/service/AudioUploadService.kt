@@ -8,8 +8,8 @@ import android.os.IBinder
 import android.util.Log
 import com.omi4wos.mobile.data.UploadRecord
 import com.omi4wos.mobile.data.UploadRepository
-import com.omi4wos.mobile.omi.OmiApiClient
 import com.omi4wos.mobile.omi.OmiConfig
+import com.omi4wos.mobile.storage.StorageUploader
 import com.omi4wos.shared.Constants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,9 +19,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Collections
 import java.util.Date
@@ -29,14 +26,12 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Receives assembled Opus audio segments from [AudioReceiverService], writes them to
- * Limitless-compatible .bin files, and uploads them to Omi Cloud.
+ * 接收 [AudioReceiverService] 组装好的 Opus 音频片段, 委托 [StorageUploader]
+ * 上传/写入到用户配置的存储方案（本地文件/HTTP/S3）。
  *
- * Segments are buffered in memory (keyed by syncId). When the watch sends CMD_SYNC_END
- * (translated into ACTION_FLUSH_SYNC), all buffered segments for that syncId are grouped
- * into temporal sessions (gaps > SESSION_GAP_MS = separate upload) and each session is
- * sent as one multipart POST. This prevents conversation fragmentation on Omi's backend
- * and ensures segments from a single sync window land in one conversation.
+ * Segments 按 syncId 缓存, 当收到 CMD_SYNC_END (ACTION_FLUSH_SYNC) 时, 同一 syncId
+ * 下所有片段按时间戳排序, 按 5min 间隔切分成多个 session, 每个 session 拼接成
+ * 一个连续 opus 流, 一次性上传/写入。
  */
 class AudioUploadService : Service() {
 
@@ -54,22 +49,12 @@ class AudioUploadService : Service() {
         const val EXTRA_BATTERY_LEVEL    = "battery_level"
         const val EXTRA_AUDIO_SIZE_BYTES = "audio_size_bytes"
 
-        // Segments whose start time is more than this many ms after the previous segment's
-        // end time are treated as a separate conversation and get their own upload.
-        private const val SESSION_GAP_MS = 5 * 60 * 1000L // 5 minutes
-
-        // Placeholder key for segments that arrive before CMD_SYNC_START is processed.
-        // The Wear Data Layer does not guarantee cross-path ordering, so audio chunks on
-        // /audio/speech/ can be fully assembled before the SYNC_START control message on
-        // /audio/control/ is handled. We buffer them here and absorb into the real
-        // syncId when flushBatch() is called.
+        private const val SESSION_GAP_MS = 5 * 60 * 1000L
         private const val PENDING_SYNC_KEY = "__pending__"
 
         private val _isUploading = MutableStateFlow(false)
         val isUploading: StateFlow<Boolean> = _isUploading
 
-        // In-memory buffer for batch mode. Lives in the companion so it survives
-        // service restarts between ACTION_UPLOAD and ACTION_FLUSH_SYNC intents.
         private val pendingBatchSegments =
             ConcurrentHashMap<String, MutableList<PendingSegment>>()
 
@@ -93,8 +78,8 @@ class AudioUploadService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var repository: UploadRepository
-    private lateinit var omiClient: OmiApiClient
     private lateinit var omiConfig: OmiConfig
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -102,7 +87,6 @@ class AudioUploadService : Service() {
         createNotificationChannel()
         repository = UploadRepository.getInstance(applicationContext)
         omiConfig = OmiConfig(applicationContext)
-        omiClient = OmiApiClient(omiConfig)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -118,11 +102,6 @@ class AudioUploadService : Service() {
                 val audioSizeBytes = intent.getLongExtra(EXTRA_AUDIO_SIZE_BYTES, 0L)
 
                 if (audioData != null && audioData.isNotEmpty()) {
-                    // Buffer even when syncId is empty: the Wear Data Layer does not
-                    // guarantee that CMD_SYNC_START (control path) arrives before the
-                    // first audio chunk (speech path). Segments with no syncId are
-                    // held under PENDING_SYNC_KEY and merged into the real syncId
-                    // inside flushBatch() when CMD_SYNC_END is processed.
                     val effectiveSyncId = syncId.ifEmpty { PENDING_SYNC_KEY }
                     bufferSegment(PendingSegment(segmentId, effectiveSyncId, audioData, startTime, endTime, confidence, batteryLevel, audioSizeBytes))
                 }
@@ -137,70 +116,6 @@ class AudioUploadService : Service() {
         return START_NOT_STICKY
     }
 
-    // -----------------------------------------------------------------------
-    // Realtime path — single segment, single upload (unchanged behaviour)
-    // -----------------------------------------------------------------------
-
-    private fun uploadSegment(
-        segmentId: String,
-        syncId: String,
-        audioData: ByteArray,
-        startTime: Long,
-        endTime: Long,
-        confidence: Float,
-        batteryLevel: Int,
-        audioSizeBytes: Long
-    ) {
-        _isUploading.value = true
-        Log.i(TAG, "Uploading segment $segmentId (${audioData.size} bytes) syncId=$syncId")
-
-        serviceScope.launch {
-            try {
-                val timestampSec = startTime / 1000
-                val uploadName = "recording_fs320_$timestampSec.bin"
-
-                val cachePath = File(cacheDir, "speech_audio")
-                if (!cachePath.exists()) cachePath.mkdirs()
-                val binFile = File(cachePath, uploadName)
-
-                withContext(Dispatchers.IO) {
-                    FileOutputStream(binFile).use { it.write(audioData) }
-                }
-
-                val token = omiClient.getValidFirebaseToken(omiConfig)
-                if (token.isNullOrBlank()) {
-                    Log.w(TAG, "No valid Firebase token — cannot upload to Omi Cloud")
-                    saveRecord(segmentId, syncId, "[No valid Firebase Token]", startTime, endTime, confidence, audioSizeBytes, batteryLevel, uploaded = false)
-                    return@launch
-                }
-
-                val result = omiClient.uploadAudioSync(token, binFile, uploadName)
-
-                if (result != null) {
-                    val timeFmt = SimpleDateFormat("hh:mma", Locale.getDefault())
-                    val dateFmt = SimpleDateFormat("MM/dd/yy hh:mma", Locale.getDefault())
-                    val batteryStr = if (batteryLevel >= 0) "$batteryLevel%" else "?%"
-                    val text = "${timeFmt.format(Date())}  |  Watch Battery: $batteryStr\n" +
-                               "Uploaded to Omi Cloud: ${formatSize(audioSizeBytes)}\n" +
-                               "Spanning ${dateFmt.format(Date(startTime))} to ${dateFmt.format(Date(endTime))}"
-                    saveRecord(segmentId, syncId, text, startTime, endTime, confidence, audioSizeBytes, batteryLevel, uploaded = true)
-                    binFile.delete()
-                } else {
-                    saveRecord(segmentId, syncId, "[Omi Cloud Upload Failed]", startTime, endTime, confidence, audioSizeBytes, batteryLevel, uploaded = false)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Upload failed for $segmentId", e)
-                saveRecord(segmentId, syncId, "[Upload error: ${e.message}]", startTime, endTime, confidence, audioSizeBytes, batteryLevel, uploaded = false)
-            } finally {
-                _isUploading.value = false
-            }
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    // Batch path — buffer during session, flush when CMD_SYNC_END arrives
-    // -----------------------------------------------------------------------
-
     private fun bufferSegment(segment: PendingSegment) {
         pendingBatchSegments
             .getOrPut(segment.syncId) { Collections.synchronizedList(mutableListOf()) }
@@ -210,13 +125,8 @@ class AudioUploadService : Service() {
     }
 
     private suspend fun flushBatch(syncId: String) {
-        // Generous delay to let all in-flight ACTION_UPLOAD coroutines finish buffering.
-        // CMD_SYNC_END is sent by the watch after the last chunk, but coroutine scheduling
-        // and Binder delivery can mean the last segment arrives just after the flush starts.
         delay(2_000)
 
-        // Absorb any segments that raced ahead of CMD_SYNC_START (arrived with empty syncId).
-        // There is at most one active batch sync at a time, so all pending segments belong here.
         val racing = pendingBatchSegments.remove(PENDING_SYNC_KEY)
         if (!racing.isNullOrEmpty()) {
             Log.i(TAG, "Absorbing ${racing.size} pre-SYNC_START segment(s) into syncId=$syncId")
@@ -226,15 +136,12 @@ class AudioUploadService : Service() {
         }
 
         val segments = pendingBatchSegments.remove(syncId)
-
-        // Absorb segments orphaned by previously failed syncs (watch cancelled mid-sync before
-        // CMD_SYNC_END was sent, leaving segments buffered under a syncId that will never flush).
         val orphaned = mutableListOf<PendingSegment>()
         for (key in pendingBatchSegments.keys.toList()) {
             pendingBatchSegments.remove(key)?.let { orphaned.addAll(it) }
         }
         if (orphaned.isNotEmpty()) {
-            Log.w(TAG, "Absorbing ${orphaned.size} orphaned segment(s) from ${orphaned.map { it.syncId }.distinct()} into flush for $syncId")
+            Log.w(TAG, "Absorbing ${orphaned.size} orphaned segment(s) into flush for $syncId")
         }
 
         val allSegments = (segments ?: emptyList()) + orphaned
@@ -249,31 +156,17 @@ class AudioUploadService : Service() {
         Log.i(TAG, "Flushing batch syncId=$syncId: ${sorted.size} segment(s) → " +
                    "${sessions.size} session(s), ${formatSize(totalBytes)} total")
 
-        val token = omiClient.getValidFirebaseToken(omiConfig)
-        if (token.isNullOrBlank()) {
-            Log.w(TAG, "No valid Firebase token — cannot batch upload to Omi Cloud")
-            for (seg in allSegments) {
-                saveRecord(seg.segmentId, syncId, "[No valid Firebase Token]",
-                    seg.startTime, seg.endTime, seg.confidence, seg.audioSizeBytes, seg.batteryLevel, uploaded = false)
-            }
-            return
-        }
-
         _isUploading.value = true
         try {
+            val uploader = StorageUploader.create(applicationContext)
             for ((idx, session) in sessions.withIndex()) {
-                uploadSession(session, token, syncId, sessionNum = idx + 1, totalSessions = sessions.size)
+                uploadSession(uploader, session, syncId, sessionNum = idx + 1, totalSessions = sessions.size)
             }
         } finally {
             _isUploading.value = false
         }
     }
 
-    /**
-     * Groups a chronologically sorted segment list into continuous recording sessions.
-     * A new session begins when the gap between one segment's end and the next's start
-     * exceeds SESSION_GAP_MS — these are genuinely separate conversations.
-     */
     private fun groupIntoSessions(sorted: List<PendingSegment>): List<List<PendingSegment>> {
         if (sorted.isEmpty()) return emptyList()
         val sessions = mutableListOf<MutableList<PendingSegment>>()
@@ -292,15 +185,9 @@ class AudioUploadService : Service() {
         return sessions
     }
 
-    /**
-     * Concatenates all segments in the session into a single .bin file and uploads it
-     * as one request. The Omi API creates one conversation per file, so sending N files
-     * in a multipart request still produces N conversations. A single concatenated file
-     * guarantees one conversation per session regardless of API behaviour.
-     */
     private suspend fun uploadSession(
+        uploader: StorageUploader,
         segments: List<PendingSegment>,
-        token: String,
         syncId: String,
         sessionNum: Int,
         totalSessions: Int
@@ -308,7 +195,6 @@ class AudioUploadService : Service() {
         val label = if (totalSessions > 1) " (session $sessionNum/$totalSessions)" else ""
         val sorted = segments.sortedBy { it.startTime }
 
-        // Concatenate all segment audio into one file
         val totalAudioSize = sorted.sumOf { it.audioData.size }
         val combined = ByteArray(totalAudioSize)
         var offset = 0
@@ -318,20 +204,24 @@ class AudioUploadService : Service() {
         }
 
         val uploadName = "recording_fs320_${sorted.first().startTime / 1000}.bin"
-        val cachePath  = File(cacheDir, "speech_audio")
-        if (!cachePath.exists()) cachePath.mkdirs()
-        val binFile = File(cachePath, uploadName)
-        withContext(Dispatchers.IO) {
-            FileOutputStream(binFile).use { it.write(combined) }
-        }
-
         val totalBytes = sorted.sumOf { it.audioSizeBytes }
         Log.i(TAG, "Session upload$label: ${sorted.size} segment(s) → 1 file, ${formatSize(totalBytes)}")
 
         try {
-            val result = omiClient.uploadAudioSync(token, binFile, uploadName)
+            val ok = uploader.upload(
+                audioData = combined,
+                uploadName = uploadName,
+                segmentId = sorted.first().segmentId,
+                syncId = syncId,
+                startTimeMs = sorted.first().startTime,
+                endTimeMs = sorted.last().endTime,
+                confidence = sorted.map { it.confidence }.average().toFloat(),
+                batteryLevel = sorted.map { it.batteryLevel }.filter { it >= 0 }
+                    .let { if (it.isNotEmpty()) it.average().toInt() else -1 },
+                source = "watch"
+            )
 
-            if (result != null) {
+            if (ok) {
                 val timeFmt   = SimpleDateFormat("hh:mma", Locale.getDefault())
                 val dateFmt   = SimpleDateFormat("MM/dd/yy hh:mma", Locale.getDefault())
                 val avgBattery = sorted.map { it.batteryLevel }.filter { it >= 0 }
@@ -340,32 +230,25 @@ class AudioUploadService : Service() {
 
                 for (seg in sorted) {
                     val text = "${timeFmt.format(Date())}  |  Watch Battery: $batteryStr\n" +
-                               "Uploaded to Omi Cloud: ${formatSize(seg.audioSizeBytes)}\n" +
+                               "Uploaded (${omiConfig.getConfig().storageMethod.name}): ${formatSize(seg.audioSizeBytes)}\n" +
                                "Spanning ${dateFmt.format(Date(seg.startTime))} to ${dateFmt.format(Date(seg.endTime))}"
                     saveRecord(seg.segmentId, syncId, text, seg.startTime, seg.endTime,
                         seg.confidence, seg.audioSizeBytes, seg.batteryLevel, uploaded = true)
                 }
-                binFile.delete()
             } else {
                 for (seg in sorted) {
                     saveRecord(seg.segmentId, syncId, "[Upload Failed]",
                         seg.startTime, seg.endTime, seg.confidence, seg.audioSizeBytes, seg.batteryLevel, uploaded = false)
                 }
-                // Keep binFile so retry can re-attempt the upload later.
             }
         } catch (e: Exception) {
             Log.e(TAG, "Session upload failed$label", e)
-            // Keep binFile so retry can re-attempt the upload later.
             for (seg in sorted) {
                 saveRecord(seg.segmentId, syncId, "[Upload error: ${e.message}]",
                     seg.startTime, seg.endTime, seg.confidence, seg.audioSizeBytes, seg.batteryLevel, uploaded = false)
             }
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Shared helpers
-    // -----------------------------------------------------------------------
 
     private suspend fun saveRecord(
         segmentId: String,

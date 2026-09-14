@@ -3,26 +3,22 @@ package com.omi4wos.mobile.service
 import android.content.Context
 import android.util.Log
 import com.omi4wos.mobile.data.UploadRepository
-import com.omi4wos.mobile.omi.OmiApiClient
-import com.omi4wos.mobile.omi.OmiConfig
+import com.omi4wos.mobile.storage.StorageUploader
 import java.io.File
 
 /**
- * Shared retry logic used by both [UploadRetryWorker] (background) and
- * [com.omi4wos.mobile.viewmodel.HomeViewModel] (foreground/manual).
+ * 失败上传重试逻辑。
  *
- * Groups failed records by syncId — batch records share one .bin file named
- * after the earliest segment's timestamp. Realtime records each own their file.
- * Records whose cache file has been evicted are dismissed (marked uploaded) since
- * the audio data is unrecoverable.
+ * 把失败记录按 syncId 分组（batch 共享一个 bin 文件），从 cacheDir 读回
+ * bin 文件，再委托 [StorageUploader] 重传。
  *
- * Returns true if at least one upload succeeded.
+ * 记录对应的 bin 文件不存在（缓存被清）则标记为已上传,避免一直挂账。
+ *
+ * 返回 true 表示至少有一条重传成功。
  */
 suspend fun runUploadRetry(context: Context): Boolean {
     val tag = "UploadRetryRunner"
     val repository = UploadRepository.getInstance(context)
-    val config = OmiConfig(context)
-    val apiClient = OmiApiClient(config)
     val cacheDir = File(context.cacheDir, "speech_audio")
 
     val pending = repository.getPendingUploads()
@@ -30,8 +26,8 @@ suspend fun runUploadRetry(context: Context): Boolean {
 
     Log.i(tag, "Retrying ${pending.size} failed upload(s)")
 
-    // Group by syncId so batch records that share one .bin file are handled together.
-    // Realtime records have empty syncId — treat each as its own group.
+    val uploader = StorageUploader.create(context)
+
     val grouped = pending.groupBy { record ->
         if (record.syncId.isEmpty()) "solo_${record.id}" else record.syncId
     }
@@ -44,26 +40,31 @@ suspend fun runUploadRetry(context: Context): Boolean {
         val binFile = File(cacheDir, uploadName)
 
         if (binFile.exists()) {
-            val token = apiClient.getValidFirebaseToken(config)
-            if (token == null) {
-                Log.e(tag, "Cannot retry — no valid Firebase token")
-                return anySucceeded  // No point continuing without auth
-            }
             try {
-                val result = apiClient.uploadAudioSync(token, binFile, uploadName)
-                if (result != null) {
+                val audioData = binFile.readBytes()
+                val ok = uploader.upload(
+                    audioData = audioData,
+                    uploadName = uploadName,
+                    segmentId = earliest.segmentId,
+                    syncId = earliest.syncId,
+                    startTimeMs = earliest.timestamp,
+                    endTimeMs = earliest.endTimestamp,
+                    confidence = earliest.speechConfidence,
+                    batteryLevel = earliest.watchBatteryLevel,
+                    source = "watch_retry"
+                )
+                if (ok) {
                     for (record in records) repository.markUploaded(record.id)
                     binFile.delete()
                     anySucceeded = true
                     Log.i(tag, "Retry succeeded for ${records.size} record(s) syncId=${earliest.syncId}")
                 } else {
-                    Log.w(tag, "Retry upload returned null for $uploadName")
+                    Log.w(tag, "Retry upload returned false for $uploadName")
                 }
             } catch (e: Exception) {
                 Log.e(tag, "Retry failed for syncId=${earliest.syncId}", e)
             }
         } else {
-            // File evicted from cache — audio unrecoverable; dismiss so it stops counting.
             Log.w(tag, "Cache file missing: $uploadName — dismissing ${records.size} record(s)")
             for (record in records) repository.markUploaded(record.id)
         }

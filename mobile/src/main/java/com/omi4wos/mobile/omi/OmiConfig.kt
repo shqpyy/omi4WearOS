@@ -3,104 +3,186 @@ package com.omi4wos.mobile.omi
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.omi4wos.shared.Constants
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "omi_settings")
 
 /**
- * Manages Omi API configuration stored in DataStore preferences.
+ * 上传与监听配置。支持三种存储方案独立保存配置，切换不丢失。
+ *
+ * - [StorageMethod.LOCAL_FILE]: 写入手机本地文件 + segments.jsonl
+ * - [StorageMethod.HTTP]: POST 到自建 HTTP 服务器（multipart + X-API-Key）
+ * - [StorageMethod.S3]: 上传到 S3 兼容对象存储（腾讯云 COS / Cloudflare R2 / AWS S3 / MinIO）
+ *
+ * 另含通话录音监听配置：[PhoneWatcherConfig]
  */
 class OmiConfig(private val context: Context) {
 
-    data class Config(
-        val apiKey: String = "",
-        val appId: String = "",
-        val userId: String = "",
-        val firebaseToken: String = "",
-        val firebaseRefreshToken: String = "",
-        val firebaseWebApiKey: String = "",
-        val firebaseTokenExpiresAt: Long = 0L,
-        val uploadUrl: String = "http://124.222.91.138:8081/upload-audio",
-        val uploadApiKey: String = "***"
+    enum class StorageMethod {
+        LOCAL_FILE,
+        HTTP,
+        S3
+    }
+
+    /** 本地文件方案配置 */
+    data class LocalFileConfig(
+        val outputDir: String = DEFAULT_LOCAL_OUTPUT_DIR
+    )
+
+    /** HTTP 服务器方案配置 */
+    data class HttpConfig(
+        val uploadUrl: String = "",
+        val uploadApiKey: String = ""
+    ) {
+        val isConfigured: Boolean get() = uploadUrl.isNotBlank()
+    }
+
+    /** S3 兼容对象存储方案配置 */
+    data class S3Config(
+        val endpoint: String = "",
+        val bucket: String = "",
+        val accessKey: String = "",
+        val secretKey: String = "",
+        val region: String = "" // 可空;某些服务不需要 region
     ) {
         val isConfigured: Boolean
-            get() = uploadUrl.isNotBlank() || firebaseToken.isNotBlank() || (apiKey.isNotBlank() && appId.isNotBlank() && userId.isNotBlank())
+            get() = endpoint.isNotBlank() && bucket.isNotBlank() &&
+                    accessKey.isNotBlank() && secretKey.isNotBlank()
     }
+
+    /** 通话录音监听配置 */
+    data class PhoneWatcherConfig(
+        val enabled: Boolean = false,
+        val watchDir: String = "",                       // 手动输入路径（与 treeUri 二选一）
+        val treeUri: String = "",                        // SAF 授权的目录 URI（优先）
+        val filePatterns: String = DEFAULT_FILE_PATTERNS, // 分号分隔, 如 *.amr;*.m4a
+        val scanIntervalSec: Int = 60                    // 扫描间隔（秒）
+    )
+
+    /** 顶层配置聚合 */
+    data class Config(
+        val storageMethod: StorageMethod = StorageMethod.LOCAL_FILE,
+        val localFile: LocalFileConfig = LocalFileConfig(),
+        val http: HttpConfig = HttpConfig(),
+        val s3: S3Config = S3Config(),
+        val phoneWatcher: PhoneWatcherConfig = PhoneWatcherConfig()
+    )
 
     companion object {
-        private val KEY_API_KEY = stringPreferencesKey(Constants.PREF_OMI_API_KEY)
-        private val KEY_APP_ID = stringPreferencesKey(Constants.PREF_OMI_APP_ID)
-        private val KEY_USER_ID = stringPreferencesKey(Constants.PREF_OMI_USER_ID)
-        private val KEY_FIREBASE_TOKEN = stringPreferencesKey("omi_firebase_token")
-        private val KEY_FIREBASE_REFRESH_TOKEN = stringPreferencesKey("omi_firebase_refresh_token")
-        private val KEY_FIREBASE_WEB_API_KEY = stringPreferencesKey("omi_firebase_web_api_key")
-        private val KEY_FIREBASE_TOKEN_EXPIRES_AT = longPreferencesKey("omi_firebase_token_expires_at")
-        private val KEY_UPLOAD_URL = stringPreferencesKey("omi_upload_url")
-        private val KEY_UPLOAD_API_KEY = stringPreferencesKey("omi_upload_api_key")
+        const val DEFAULT_LOCAL_OUTPUT_DIR = "/storage/emulated/0/omi4wos"
+        const val DEFAULT_FILE_PATTERNS = "*.amr;*.m4a;*.mp3;*.aac;*.opus"
+
+        // Storage method
+        private val KEY_STORAGE_METHOD = stringPreferencesKey("storage_method")
+
+        // Local file
+        private val KEY_LOCAL_OUTPUT_DIR = stringPreferencesKey("local_output_dir")
+
+        // HTTP
+        private val KEY_HTTP_UPLOAD_URL = stringPreferencesKey("http_upload_url")
+        private val KEY_HTTP_API_KEY = stringPreferencesKey("http_api_key")
+
+        // S3
+        private val KEY_S3_ENDPOINT = stringPreferencesKey("s3_endpoint")
+        private val KEY_S3_BUCKET = stringPreferencesKey("s3_bucket")
+        private val KEY_S3_ACCESS_KEY = stringPreferencesKey("s3_access_key")
+        private val KEY_S3_SECRET_KEY = stringPreferencesKey("s3_secret_key")
+        private val KEY_S3_REGION = stringPreferencesKey("s3_region")
+
+        // Phone watcher
+        private val KEY_PW_ENABLED = booleanPreferencesKey("pw_enabled")
+        private val KEY_PW_DIR = stringPreferencesKey("pw_dir")
+        private val KEY_PW_TREE_URI = stringPreferencesKey("pw_tree_uri")
+        private val KEY_PW_PATTERNS = stringPreferencesKey("pw_patterns")
+        private val KEY_PW_INTERVAL = intPreferencesKey("pw_interval")
     }
 
-    /**
-     * Get the current Omi configuration.
-     */
     suspend fun getConfig(): Config {
         return context.dataStore.data.map { prefs ->
             Config(
-                apiKey = prefs[KEY_API_KEY] ?: "",
-                appId = prefs[KEY_APP_ID] ?: "",
-                userId = prefs[KEY_USER_ID] ?: "",
-                firebaseToken = prefs[KEY_FIREBASE_TOKEN] ?: "",
-                firebaseRefreshToken = prefs[KEY_FIREBASE_REFRESH_TOKEN] ?: "",
-                firebaseWebApiKey = prefs[KEY_FIREBASE_WEB_API_KEY] ?: "",
-                firebaseTokenExpiresAt = prefs[KEY_FIREBASE_TOKEN_EXPIRES_AT] ?: 0L,
-                uploadUrl = prefs[KEY_UPLOAD_URL] ?: "http://124.222.91.138:8081/upload-audio",
-                uploadApiKey = prefs[KEY_UPLOAD_API_KEY] ?: "***"
+                storageMethod = prefs[KEY_STORAGE_METHOD]
+                    ?.let { runCatching { StorageMethod.valueOf(it) }.getOrNull() }
+                    ?: StorageMethod.LOCAL_FILE,
+                localFile = LocalFileConfig(
+                    outputDir = prefs[KEY_LOCAL_OUTPUT_DIR] ?: DEFAULT_LOCAL_OUTPUT_DIR
+                ),
+                http = HttpConfig(
+                    uploadUrl = prefs[KEY_HTTP_UPLOAD_URL] ?: "",
+                    uploadApiKey = prefs[KEY_HTTP_API_KEY] ?: ""
+                ),
+                s3 = S3Config(
+                    endpoint = prefs[KEY_S3_ENDPOINT] ?: "",
+                    bucket = prefs[KEY_S3_BUCKET] ?: "",
+                    accessKey = prefs[KEY_S3_ACCESS_KEY] ?: "",
+                    secretKey = prefs[KEY_S3_SECRET_KEY] ?: "",
+                    region = prefs[KEY_S3_REGION] ?: ""
+                ),
+                phoneWatcher = PhoneWatcherConfig(
+                    enabled = prefs[KEY_PW_ENABLED] ?: false,
+                    watchDir = prefs[KEY_PW_DIR] ?: "",
+                    treeUri = prefs[KEY_PW_TREE_URI] ?: "",
+                    filePatterns = prefs[KEY_PW_PATTERNS] ?: DEFAULT_FILE_PATTERNS,
+                    scanIntervalSec = prefs[KEY_PW_INTERVAL] ?: 60
+                )
             )
         }.first()
     }
 
-    /**
-     * Save the Omi configuration.
-     */
     suspend fun saveConfig(config: Config) {
         context.dataStore.edit { prefs ->
-            prefs[KEY_API_KEY] = config.apiKey
-            prefs[KEY_APP_ID] = config.appId
-            prefs[KEY_USER_ID] = config.userId
-            prefs[KEY_FIREBASE_TOKEN] = config.firebaseToken
-            prefs[KEY_FIREBASE_REFRESH_TOKEN] = config.firebaseRefreshToken
-            prefs[KEY_FIREBASE_WEB_API_KEY] = config.firebaseWebApiKey
-            prefs[KEY_FIREBASE_TOKEN_EXPIRES_AT] = config.firebaseTokenExpiresAt
-            prefs[KEY_UPLOAD_URL] = config.uploadUrl
-            prefs[KEY_UPLOAD_API_KEY] = config.uploadApiKey
+            prefs[KEY_STORAGE_METHOD] = config.storageMethod.name
+            prefs[KEY_LOCAL_OUTPUT_DIR] = config.localFile.outputDir
+            prefs[KEY_HTTP_UPLOAD_URL] = config.http.uploadUrl
+            prefs[KEY_HTTP_API_KEY] = config.http.uploadApiKey
+            prefs[KEY_S3_ENDPOINT] = config.s3.endpoint
+            prefs[KEY_S3_BUCKET] = config.s3.bucket
+            prefs[KEY_S3_ACCESS_KEY] = config.s3.accessKey
+            prefs[KEY_S3_SECRET_KEY] = config.s3.secretKey
+            prefs[KEY_S3_REGION] = config.s3.region
+            prefs[KEY_PW_ENABLED] = config.phoneWatcher.enabled
+            prefs[KEY_PW_DIR] = config.phoneWatcher.watchDir
+            prefs[KEY_PW_TREE_URI] = config.phoneWatcher.treeUri
+            prefs[KEY_PW_PATTERNS] = config.phoneWatcher.filePatterns
+            prefs[KEY_PW_INTERVAL] = config.phoneWatcher.scanIntervalSec
         }
     }
 
-    /**
-     * Observe configuration changes as a Flow.
-     */
     fun observeConfig() = context.dataStore.data.map { prefs ->
         Config(
-            apiKey = prefs[KEY_API_KEY] ?: "",
-            appId = prefs[KEY_APP_ID] ?: "",
-            userId = prefs[KEY_USER_ID] ?: "",
-            firebaseToken = prefs[KEY_FIREBASE_TOKEN] ?: "",
-            firebaseRefreshToken = prefs[KEY_FIREBASE_REFRESH_TOKEN] ?: "",
-            firebaseWebApiKey = prefs[KEY_FIREBASE_WEB_API_KEY] ?: "",
-            firebaseTokenExpiresAt = prefs[KEY_FIREBASE_TOKEN_EXPIRES_AT] ?: 0L,
-            uploadUrl = prefs[KEY_UPLOAD_URL] ?: "http://124.222.91.138:8081/upload-audio",
-            uploadApiKey = prefs[KEY_UPLOAD_API_KEY] ?: "***"
+            storageMethod = prefs[KEY_STORAGE_METHOD]
+                ?.let { runCatching { StorageMethod.valueOf(it) }.getOrNull() }
+                ?: StorageMethod.LOCAL_FILE,
+            localFile = LocalFileConfig(
+                outputDir = prefs[KEY_LOCAL_OUTPUT_DIR] ?: DEFAULT_LOCAL_OUTPUT_DIR
+            ),
+            http = HttpConfig(
+                uploadUrl = prefs[KEY_HTTP_UPLOAD_URL] ?: "",
+                uploadApiKey = prefs[KEY_HTTP_API_KEY] ?: ""
+            ),
+            s3 = S3Config(
+                endpoint = prefs[KEY_S3_ENDPOINT] ?: "",
+                bucket = prefs[KEY_S3_BUCKET] ?: "",
+                accessKey = prefs[KEY_S3_ACCESS_KEY] ?: "",
+                secretKey = prefs[KEY_S3_SECRET_KEY] ?: "",
+                region = prefs[KEY_S3_REGION] ?: ""
+            ),
+            phoneWatcher = PhoneWatcherConfig(
+                enabled = prefs[KEY_PW_ENABLED] ?: false,
+                watchDir = prefs[KEY_PW_DIR] ?: "",
+                treeUri = prefs[KEY_PW_TREE_URI] ?: "",
+                filePatterns = prefs[KEY_PW_PATTERNS] ?: DEFAULT_FILE_PATTERNS,
+                scanIntervalSec = prefs[KEY_PW_INTERVAL] ?: 60
+            )
         )
     }
 
-    /**
-     * Clear all configuration.
-     */
     suspend fun clearConfig() {
         context.dataStore.edit { it.clear() }
     }

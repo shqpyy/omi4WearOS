@@ -40,6 +40,17 @@ android {
         compose = true
         buildConfig = true
     }
+
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/INDEX_LIST",
+                "META-INF/DEPENDENCIES",
+                "META-INF/io.netty.versions.properties",
+                "META-INF/*.kotlin_module"
+            )
+        }
+    }
 }
 
 dependencies {
@@ -88,8 +99,12 @@ dependencies {
     // Material3 theme (Theme.Material3.DayNight.NoActionBar referenced in AndroidManifest)
     implementation("com.google.android.material:material:1.12.0")
 
-    // WorkManager for background upload retry
+    // WorkManager for background upload retry / phone recording watcher
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // AWS S3 SDK for S3-compatible object storage (Tencent COS / Cloudflare R2 / MinIO / AWS S3)
+    implementation("com.amazonaws:aws-android-sdk-s3:2.77.0")
+    implementation("com.amazonaws:aws-android-sdk-core:2.77.0")
 
     // Core
     implementation("androidx.core:core-ktx:1.13.1")

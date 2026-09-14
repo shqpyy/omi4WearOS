@@ -1,6 +1,15 @@
 package com.omi4wos.mobile.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,21 +22,28 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.omi4wos.mobile.omi.OmiConfig
+import com.omi4wos.mobile.service.BatteryOptimizationHelper
 import com.omi4wos.mobile.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
@@ -38,6 +54,23 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // SAF 选目录启动器
+    val pickDirLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            // 保持持久授权
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+            viewModel.updatePhoneWatchTreeUri(uri.toString())
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -53,169 +86,526 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Omi API Configuration
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
+        // === 1. 存储方案选择 ===
+        StorageMethodCard(
+            uiState = uiState,
+            onMethodSelected = viewModel::updateStorageMethod
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // === 2. 对应方案的配置项 ===
+        when (uiState.storageMethod) {
+            OmiConfig.StorageMethod.LOCAL_FILE -> LocalFileConfigCard(
+                uiState = uiState,
+                onOutputDirChange = viewModel::updateLocalOutputDir
             )
+            OmiConfig.StorageMethod.HTTP -> HttpConfigCard(
+                uiState = uiState,
+                onUrlChange = viewModel::updateHttpUploadUrl,
+                onKeyChange = viewModel::updateHttpApiKey
+            )
+            OmiConfig.StorageMethod.S3 -> S3ConfigCard(
+                uiState = uiState,
+                onEndpointChange = viewModel::updateS3Endpoint,
+                onBucketChange = viewModel::updateS3Bucket,
+                onAccessKeyChange = viewModel::updateS3AccessKey,
+                onSecretKeyChange = viewModel::updateS3SecretKey,
+                onRegionChange = viewModel::updateS3Region
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // === 3. Test / Save 按钮 ===
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
+            OutlinedButton(
+                onClick = {
+                    viewModel.testConnection()
+                    scope.launch {
+                        val result = uiState.testResult
+                        if (result != null) snackbarHostState.showSnackbar(result)
+                    }
+                },
+                enabled = !uiState.isTesting,
+                modifier = Modifier.weight(1f)
             ) {
-                Text(
-                    text = "Omi Cloud Configuration",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "Configure your direct-sync credentials to upload audio securely.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                // Omi Firebase ID configuration (v2/sync-local-files requires this instead of standard keys)
-                Text(
-                    text = "Omi Web Session Authentication (Required)",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "The audio upload API requires tokens from your browser session on app.omi.me.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "How to obtain Firebase Token:\n" +
-                            "1. Open app.omi.me in Chrome and sign in (from a computer is best).\n" +
-                            "2. Open DevTools (`F12` or `Cmd+Option+I`) → Network tab\n" +
-                            "3. Click any request in the list → Headers → copy the value after `Authorization: Bearer `\n\n" +
-                            "How to obtain Refresh Token (for automatic long-term renewal):\n" +
-                            "1. In DevTools → Application tab\n" +
-                            "2. IndexedDB → `firebaseLocalStorageDb` → `firebaseLocalStorage`\n" +
-                            "3. Expand your user entry → `stsTokenManager` → copy `refreshToken`\n\n" +
-                            "How to obtain Web API Key (required for auto-refresh):\n" +
-                            "1. In the Network tab, filter requests by `googleapis.com`\n" +
-                            "2. Look for the API key in the request URL parameter: `key=AIza...`",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OutlinedTextField(
-                    value = uiState.firebaseWebApiKey,
-                    onValueChange = { viewModel.updateFirebaseWebApiKey(it) },
-                    label = { Text("Firebase Web API Key") },
-                    placeholder = { Text("AIza...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = uiState.firebaseToken,
-                    onValueChange = { viewModel.updateFirebaseToken(it) },
-                    label = { Text("Firebase Token (expires in 1h)") },
-                    placeholder = { Text("eyJ...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = uiState.firebaseRefreshToken,
-                    onValueChange = { viewModel.updateFirebaseRefreshToken(it) },
-                    label = { Text("Refresh Token") },
-                    placeholder = { Text("AMf...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    singleLine = true
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OutlinedTextField(
-                    value = uiState.uploadUrl,
-                    onValueChange = { viewModel.updateUploadUrl(it) },
-                    label = { Text("Upload URL") },
-                    placeholder = { Text("http://your-server:8080/upload-audio") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = uiState.uploadApiKey,
-                    onValueChange = { viewModel.updateUploadApiKey(it) },
-                    label = { Text("Upload API Key") },
-                    placeholder = { Text("x-api-key value") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Button(
-                    onClick = {
-                        viewModel.saveSettings()
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Settings saved")
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Save Settings")
-                }
+                Text(if (uiState.isTesting) "Testing..." else "Test Connection")
+            }
+            Button(
+                onClick = {
+                    viewModel.saveSettings()
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            if (uiState.saveSuccess == true) "Saved" else "Saving..."
+                        )
+                    }
+                },
+                enabled = !uiState.isSaving,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(if (uiState.isSaving) "Saving..." else "Save")
             }
         }
+
+        uiState.testResult?.let { result ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = result,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (result.startsWith("OK")) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.error
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // === 4. 通话录音监听 ===
+        PhoneWatcherCard(
+            uiState = uiState,
+            onEnabledChange = viewModel::updatePhoneWatcherEnabled,
+            onDirChange = viewModel::updatePhoneWatchDir,
+            onPickDir = { pickDirLauncher.launch(null) },
+            onClearTreeUri = { viewModel.updatePhoneWatchTreeUri("") },
+            onPatternsChange = viewModel::updatePhoneWatchPatterns,
+            onIntervalChange = viewModel::updatePhoneWatchInterval
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // === 5. 保活引导 ===
+        KeepAliveCard(
+            context = context,
+            snackbarHostState = snackbarHostState
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Status info
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Text(
-                    text = "About",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "omi4wOS Companion V1.0.0 (cipioh version)",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = "Adapted from https://github.com/neurocis/omi4wos",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        // === 6. About ===
+        AboutCard()
 
         Spacer(modifier = Modifier.height(16.dp))
 
         SnackbarHost(hostState = snackbarHostState)
+    }
+}
+
+@Composable
+private fun StorageMethodCard(
+    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
+    onMethodSelected: (OmiConfig.StorageMethod) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Storage Method",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OmiConfig.StorageMethod.values().forEach { method ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    RadioButton(
+                        selected = uiState.storageMethod == method,
+                        onClick = { onMethodSelected(method) }
+                    )
+                    Text(
+                        text = when (method) {
+                            OmiConfig.StorageMethod.LOCAL_FILE -> "Local File (default)"
+                            OmiConfig.StorageMethod.HTTP -> "Custom HTTP Server"
+                            OmiConfig.StorageMethod.S3 -> "S3-Compatible Object Storage"
+                        },
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Switch method anytime — other methods' configs are preserved.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun LocalFileConfigCard(
+    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
+    onOutputDirChange: (String) -> Unit
+) {
+    ConfigCard(title = "Local File Configuration") {
+        OutlinedTextField(
+            value = uiState.localOutputDir,
+            onValueChange = onOutputDirChange,
+            label = { Text("Output Directory") },
+            placeholder = { Text("/storage/emulated/0/omi4wos") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Files: <dir>/audio/YYYYMMDD/segment_XXXX.<ext> + segments.jsonl metadata.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun HttpConfigCard(
+    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
+    onUrlChange: (String) -> Unit,
+    onKeyChange: (String) -> Unit
+) {
+    ConfigCard(title = "HTTP Server Configuration") {
+        OutlinedTextField(
+            value = uiState.httpUploadUrl,
+            onValueChange = onUrlChange,
+            label = { Text("Upload URL") },
+            placeholder = { Text("http://your-server:8080/upload-audio") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = uiState.httpApiKey,
+            onValueChange = onKeyChange,
+            label = { Text("API Key (optional, sent as X-API-Key)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "multipart/form-data POST, field name \"files\".",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun S3ConfigCard(
+    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
+    onEndpointChange: (String) -> Unit,
+    onBucketChange: (String) -> Unit,
+    onAccessKeyChange: (String) -> Unit,
+    onSecretKeyChange: (String) -> Unit,
+    onRegionChange: (String) -> Unit
+) {
+    ConfigCard(title = "S3-Compatible Storage Configuration") {
+        Text(
+            text = "Works with: Tencent COS / Cloudflare R2 / AWS S3 / MinIO / Aliyun OSS / Backblaze B2.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = uiState.s3Endpoint,
+            onValueChange = onEndpointChange,
+            label = { Text("Endpoint") },
+            placeholder = { Text("cos.ap-shanghai.myqcloud.com or s3.amazonaws.com") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = uiState.s3Bucket,
+            onValueChange = onBucketChange,
+            label = { Text("Bucket Name") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = uiState.s3AccessKey,
+            onValueChange = onAccessKeyChange,
+            label = { Text("Access Key") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = uiState.s3SecretKey,
+            onValueChange = onSecretKeyChange,
+            label = { Text("Secret Key") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = uiState.s3Region,
+            onValueChange = onRegionChange,
+            label = { Text("Region (optional)") },
+            placeholder = { Text("us-east-1 / ap-shanghai / empty for path-style") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+    }
+}
+
+@Composable
+private fun PhoneWatcherCard(
+    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
+    onEnabledChange: (Boolean) -> Unit,
+    onDirChange: (String) -> Unit,
+    onPickDir: () -> Unit,
+    onClearTreeUri: () -> Unit,
+    onPatternsChange: (String) -> Unit,
+    onIntervalChange: (Int) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Phone Recording Watcher",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = uiState.phoneWatcherEnabled,
+                    onCheckedChange = onEnabledChange
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Watch a directory for new call recordings / audio files and upload them automatically.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (uiState.phoneWatcherEnabled) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Directory (SAF preferred — picks via system file picker, persists across reboots)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onPickDir,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (uiState.phoneWatchTreeUri.isEmpty()) "Pick Directory" else "Picked ✓")
+                    }
+                    if (uiState.phoneWatchTreeUri.isNotEmpty()) {
+                        OutlinedButton(onClick = onClearTreeUri) {
+                            Text("Clear")
+                        }
+                    }
+                }
+
+                if (uiState.phoneWatchTreeUri.isNotEmpty()) {
+                    Text(
+                        text = "URI: ${uiState.phoneWatchTreeUri.take(80)}${if (uiState.phoneWatchTreeUri.length > 80) "..." else ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Or enter path manually (lower priority than SAF)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = uiState.phoneWatchDir,
+                    onValueChange = onDirChange,
+                    label = { Text("Watch Directory Path") },
+                    placeholder = { Text("/sdcard/Record/CallRecord/") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = uiState.phoneWatchPatterns,
+                    onValueChange = onPatternsChange,
+                    label = { Text("File Patterns (semicolon-separated)") },
+                    placeholder = { Text("*.amr;*.m4a;*.mp3;*.aac;*.opus") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = uiState.phoneWatchInterval.toString(),
+                    onValueChange = { v ->
+                        v.toIntOrNull()?.let { onIntervalChange(it) }
+                    },
+                    label = { Text("Scan Interval (seconds, 15–3600)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeepAliveCard(
+    context: android.content.Context,
+    snackbarHostState: SnackbarHostState
+) {
+    val scope = rememberCoroutineScope()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Keep-Alive Settings",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Android aggressively kills background services. For 24/7 recording watcher, whitelist this app and disable battery optimization.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 1. 电池优化白名单
+            val isWhitelisted = BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context)
+            Button(
+                onClick = {
+                    val activity = context as? Activity
+                    if (activity != null) {
+                        BatteryOptimizationHelper.requestIgnoreBatteryOptimizations(activity)
+                    } else {
+                        scope.launch { snackbarHostState.showSnackbar("Open this page from the app to grant permission") }
+                    }
+                },
+                enabled = !isWhitelisted,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isWhitelisted) "✓ Battery optimized whitelist granted" else "Grant battery whitelist")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 2. 厂商自启动设置
+            val autoStartIntent = remember(context) {
+                BatteryOptimizationHelper.getManufacturerAutoStartIntent(context)
+            }
+            if (autoStartIntent != null) {
+                OutlinedButton(
+                    onClick = {
+                        runCatching { context.startActivity(autoStartIntent) }
+                            .onFailure {
+                                scope.launch { snackbarHostState.showSnackbar("Cannot open: ${it.message}") }
+                            }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val mfr = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+                    Text("Open $mfr auto-start settings")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 3. 应用详情（电池/存储权限兜底）
+            OutlinedButton(
+                onClick = {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        .setData(Uri.parse("package:${context.packageName}"))
+                    runCatching { context.startActivity(intent) }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Open app info (battery, storage, permissions)")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "About",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "omi4wOS Companion V1.11.0 (multi-storage edition)",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = "Adapted from https://github.com/neurocis/omi4wos",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConfigCard(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            content()
+        }
     }
 }
