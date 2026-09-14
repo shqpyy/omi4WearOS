@@ -72,7 +72,8 @@ class OmiConfig(private val context: Context) {
         val localFile: LocalFileConfig = LocalFileConfig(),
         val http: HttpConfig = HttpConfig(),
         val s3: S3Config = S3Config(),
-        val phoneWatcher: PhoneWatcherConfig = PhoneWatcherConfig()
+        val phoneWatcher: PhoneWatcherConfig = PhoneWatcherConfig(),
+        val language: String = DEFAULT_LANGUAGE
     )
 
     companion object {
@@ -80,6 +81,7 @@ class OmiConfig(private val context: Context) {
         const val DEFAULT_FILE_PATTERNS = "*.amr;*.m4a;*.mp3;*.aac;*.opus"
         const val DEFAULT_HTTP_UPLOAD_URL = "http://124.222.91.138:8081/upload-audio"
         const val DEFAULT_HTTP_API_KEY = "OMI_UPLOAD_KEY_2026"
+        const val DEFAULT_LANGUAGE = "system"  // system / en / zh-CN
 
         // Storage method
         private val KEY_STORAGE_METHOD = stringPreferencesKey("storage_method")
@@ -104,6 +106,9 @@ class OmiConfig(private val context: Context) {
         private val KEY_PW_TREE_URI = stringPreferencesKey("pw_tree_uri")
         private val KEY_PW_PATTERNS = stringPreferencesKey("pw_patterns")
         private val KEY_PW_INTERVAL = intPreferencesKey("pw_interval")
+
+        // Language
+        private val KEY_LANGUAGE = stringPreferencesKey("language")
     }
 
     suspend fun getConfig(): Config {
@@ -132,7 +137,8 @@ class OmiConfig(private val context: Context) {
                     treeUri = prefs[KEY_PW_TREE_URI] ?: "",
                     filePatterns = prefs[KEY_PW_PATTERNS] ?: DEFAULT_FILE_PATTERNS,
                     scanIntervalSec = prefs[KEY_PW_INTERVAL] ?: 60
-                )
+                ),
+                language = prefs[KEY_LANGUAGE] ?: DEFAULT_LANGUAGE
             )
         }.first()
     }
@@ -153,6 +159,7 @@ class OmiConfig(private val context: Context) {
             prefs[KEY_PW_TREE_URI] = config.phoneWatcher.treeUri
             prefs[KEY_PW_PATTERNS] = config.phoneWatcher.filePatterns
             prefs[KEY_PW_INTERVAL] = config.phoneWatcher.scanIntervalSec
+            prefs[KEY_LANGUAGE] = config.language
         }
     }
 
@@ -181,7 +188,8 @@ class OmiConfig(private val context: Context) {
                 treeUri = prefs[KEY_PW_TREE_URI] ?: "",
                 filePatterns = prefs[KEY_PW_PATTERNS] ?: DEFAULT_FILE_PATTERNS,
                 scanIntervalSec = prefs[KEY_PW_INTERVAL] ?: 60
-            )
+            ),
+            language = prefs[KEY_LANGUAGE] ?: DEFAULT_LANGUAGE
         )
     }
 

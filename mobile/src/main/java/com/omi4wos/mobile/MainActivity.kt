@@ -1,6 +1,7 @@
 package com.omi4wos.mobile
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
@@ -14,14 +15,38 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.mobile.service.UploadRetryWorker
 import com.omi4wos.mobile.service.WatchReceiverService
 import com.omi4wos.mobile.ui.MobileApp
+import kotlinx.coroutines.runBlocking
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
 
     companion object { private const val TAG = "MainActivity" }
+
+    /**
+     * 启动时应用保存的语言（兼容 API 28+，不依赖 AppCompat 的自动 recreate）。
+     * SettingsViewModel.updateLanguage 调用 AppCompatDelegate.setApplicationLocales 后，
+     * API 33+ 会自动 recreate；API < 33 下次启动时这里会应用新语言。
+     */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        val lang = try {
+            runBlocking { OmiConfig(newBase).getConfig().language }
+        } catch (_: Exception) { OmiConfig.DEFAULT_LANGUAGE }
+
+        val wrapped = if (lang != "system") {
+            val locale = Locale.forLanguageTag(lang)
+            val config = Configuration(newBase.resources.configuration)
+            config.setLocale(locale)
+            newBase.createConfigurationContext(config)
+        } else {
+            newBase
+        }
+        super.attachBaseContext(wrapped)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

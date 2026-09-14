@@ -53,6 +53,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     viewModel: SettingsViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -86,6 +87,14 @@ fun SettingsScreen(
         )
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        // === 0. 语言切换 ===
+        LanguageCard(
+            uiState = uiState,
+            onLanguageSelected = viewModel::updateLanguage
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         // === 1. 存储方案选择 ===
         StorageMethodCard(
@@ -191,6 +200,49 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         SnackbarHost(hostState = snackbarHostState)
+    }
+}
+
+@Composable
+private fun LanguageCard(
+    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
+    onLanguageSelected: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val languages = listOf(
+        "system" to context.getString(R.string.language_system),
+        "en" to context.getString(R.string.language_english),
+        "zh-CN" to context.getString(R.string.language_chinese)
+    )
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = context.getString(R.string.language_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            languages.forEach { (code, label) ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    RadioButton(
+                        selected = uiState.language == code,
+                        onClick = { onLanguageSelected(code) }
+                    )
+                    Text(
+                        text = label,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -530,19 +582,23 @@ private fun KeepAliveCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 2. 厂商自启动设置
-            val autoStartIntent = remember(context) {
-                BatteryOptimizationHelper.getManufacturerAutoStartIntent(context)
-            }
+            // 2. 厂商自启动设置（点击时实时解析多候选 Intent，绕过 remember 缓存）
             OutlinedButton(
                 onClick = {
-                    val intent = autoStartIntent
-                        ?: Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    val opened = BatteryOptimizationHelper.openAutoStartSettings(context)
+                    if (!opened) {
+                        // 厂商自启动页都打不开 → 退到应用详情页（电池/启动 tab）
+                        val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                             .setData(Uri.parse("package:${context.packageName}"))
-                    runCatching { context.startActivity(intent) }
-                        .onFailure {
-                            scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.test_fail, it.message)) }
-                        }
+                        runCatching { context.startActivity(fallback) }
+                            .onFailure {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.keepalive_autostart_unavailable, it.message ?: "")
+                                    )
+                                }
+                            }
+                    }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {

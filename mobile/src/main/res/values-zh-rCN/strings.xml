@@ -52,12 +52,17 @@
     <string name='keepalive_desc'>Android 会杀掉后台服务。要 24/7 监听，请把本 App 加入白名单。</string>
     <string name='keepalive_whitelist_granted'>电池优化白名单已授予</string>
     <string name='keepalive_whitelist_grant'>授予电池白名单</string>
-    <string name='keepalive_autostart'>打开 {0} 自启动设置</string>
+    <string name='keepalive_autostart'>打开 %1$s 自启动设置</string>
     <string name='keepalive_appinfo'>打开应用信息（电池、存储、权限）</string>
+    <string name='keepalive_autostart_unavailable'>无法打开自启动页：%1$s。已跳转应用详情页。</string>
     <string name='about_title'>关于</string>
     <string name='about_version'>omi4wOS 伴侣 V1.11.0（多存储版）</string>
     <string name='about_adapted'>改编自 https://github.com/neurocis/omi4wos</string>
     <string name='test_success'>连接成功</string>
-    <string name='test_fail'>连接失败：{0}</string>
+    <string name='test_fail'>连接失败：%1$s</string>
     <string name='test_not_configured'>请先配置存储方式</string>
+    <string name='language_title'>语言</string>
+    <string name='language_system'>跟随系统</string>
+    <string name='language_english'>English</string>
+    <string name='language_chinese'>中文</string>
 </resources>

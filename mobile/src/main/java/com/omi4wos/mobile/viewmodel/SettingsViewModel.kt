@@ -1,6 +1,8 @@
 package com.omi4wos.mobile.viewmodel
 
 import android.app.Application
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.omi4wos.mobile.omi.OmiConfig
@@ -44,6 +46,9 @@ data class SettingsUiState(
     val phoneWatchPatterns: String = OmiConfig.DEFAULT_FILE_PATTERNS,
     val phoneWatchInterval: Int = 60,
 
+    // 语言（system / en / zh-CN）
+    val language: String = OmiConfig.DEFAULT_LANGUAGE,
+
     // 操作状态
     val isSaving: Boolean = false,
     val saveSuccess: Boolean? = null,
@@ -79,7 +84,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 phoneWatchDir = config.phoneWatcher.watchDir,
                 phoneWatchTreeUri = config.phoneWatcher.treeUri,
                 phoneWatchPatterns = config.phoneWatcher.filePatterns,
-                phoneWatchInterval = config.phoneWatcher.scanIntervalSec
+                phoneWatchInterval = config.phoneWatcher.scanIntervalSec,
+                language = config.language
             )
         }
     }
@@ -87,6 +93,25 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // ---- 切换存储方案 ----
     fun updateStorageMethod(method: OmiConfig.StorageMethod) {
         _uiState.value = _uiState.value.copy(storageMethod = method)
+    }
+
+    // ---- 语言切换（保存 + 立即应用，AppCompatDelegate 会触发 Activity recreate）----
+    fun updateLanguage(language: String) {
+        _uiState.value = _uiState.value.copy(language = language)
+        viewModelScope.launch {
+            val current = omiConfig.getConfig()
+            omiConfig.saveConfig(current.copy(language = language))
+            applyLanguage(language)
+        }
+    }
+
+    private fun applyLanguage(language: String) {
+        val locales = if (language == "system") {
+            LocaleListCompat.getEmptyLocaleList()
+        } else {
+            LocaleListCompat.forLanguageTags(language)
+        }
+        AppCompatDelegate.setApplicationLocales(locales)
     }
 
     // ---- 本地文件 ----
@@ -163,7 +188,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                             treeUri = state.phoneWatchTreeUri.trim(),
                             filePatterns = state.phoneWatchPatterns.trim(),
                             scanIntervalSec = state.phoneWatchInterval.coerceIn(15, 3600)
-                        )
+                        ),
+                        language = state.language
                     )
                 )
                 _uiState.value = _uiState.value.copy(isSaving = false, saveSuccess = true)
@@ -213,7 +239,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                             treeUri = state.phoneWatchTreeUri.trim(),
                             filePatterns = state.phoneWatchPatterns.trim(),
                             scanIntervalSec = state.phoneWatchInterval.coerceIn(15, 3600)
-                        )
+                        ),
+                        language = state.language
                     )
                 )
 

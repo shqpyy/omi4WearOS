@@ -53,6 +53,76 @@ object BatteryOptimizationHelper {
     }
 
     /**
+     * 直接打开厂商自启动管理页。
+     *
+     * 健壮策略:
+     *   1. 取该厂商所有候选 Intent
+     *   2. 先尝试 resolveActivity 可用的
+     *   3. 再尝试直接 startActivity（绕过 resolveActivity —— 某些 ROM 不暴露但可启动）
+     *   4. 全部失败返回 false（调用方退到应用详情页）
+     *
+     * 解决问题: HUAWEI HarmonyOS 改了 Activity 名，导致原 getManufacturerAutoStartIntent 返回 null，
+     *          旧代码静默 fallback 到应用详情页，用户以为按钮没反应。
+     */
+    fun openAutoStartSettings(context: Context): Boolean {
+        val candidates = getAutoStartCandidates()
+        // 1. 优先用 resolveActivity 可用的
+        for (intent in candidates) {
+            if (isIntentAvailable(context, intent)) {
+                if (runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) {
+                    return true
+                }
+            }
+        }
+        // 2. 绕过 resolveActivity 直接启动（HarmonyOS / MIUI 有时不暴露 resolveActivity）
+        for (intent in candidates) {
+            if (runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * 各厂商自启动设置页候选 Intent 列表（按优先级排序）。
+     * 同一厂商多个候选，覆盖不同 ROM 版本。
+     */
+    private fun getAutoStartCandidates(): List<Intent> {
+        val mfr = Build.MANUFACTURER.lowercase()
+        return when {
+            mfr.contains("xiaomi") || mfr.contains("redmi") -> listOf(
+                Intent().apply { setClassName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity") }
+            )
+            mfr.contains("huawei") || mfr.contains("honor") -> listOf(
+                // EMUI 旧版
+                Intent().apply { setClassName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity") },
+                // HarmonyOS 新版（应用启动管理）
+                Intent().apply { setClassName("com.huawei.systemmanager", "com.huawei.systemmanager.appcontrol.HwFrozeAppListActivity") },
+                // 省电模式 / 锁屏清理
+                Intent().apply { setClassName("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity") },
+                // 鸿蒙纯净模式
+                Intent().apply { setClassName("com.huawei.systemmanager", "com.huawei.systemmanager.featureviews.sceneswitch.AppScenerySwitchActivity") }
+            )
+            mfr.contains("oppo") || mfr.contains("realme") -> listOf(
+                Intent().apply { setClassName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity") },
+                Intent().apply { setClassName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity2") },
+                Intent().apply { setClassName("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity") }
+            )
+            mfr.contains("vivo") -> listOf(
+                Intent().apply { setClassName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity") },
+                Intent().apply { setClassName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager") }
+            )
+            mfr.contains("samsung") -> listOf(
+                Intent().apply { setClassName("com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity") }
+            )
+            mfr.contains("meizu") -> listOf(
+                Intent().apply { setClassName("com.meizu.safe", "com.meizu.safe.security.SHOW_APPSEC") }
+            )
+            else -> emptyList()
+        }
+    }
+
+    /**
      * 检测厂商并返回对应的自启动管理设置页 Intent。
      * 找不到匹配的厂商返回 null（调用方应退到通用电池设置）。
      */
