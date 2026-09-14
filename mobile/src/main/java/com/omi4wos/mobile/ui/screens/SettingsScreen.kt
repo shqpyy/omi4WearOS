@@ -572,17 +572,17 @@ private fun AboutCard() {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = context.getString(R.string.about_title),
+                text = stringResource(R.string.about_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = context.getString(R.string.about_version),
+                text = stringResource(R.string.about_version),
                 style = MaterialTheme.typography.bodyMedium
             )
             Text(
-                text = context.getString(R.string.about_adapted),
+                text = stringResource(R.string.about_adapted),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -612,6 +612,7 @@ private fun ConfigCard(
         }
     }
 }
+
 
 
 
