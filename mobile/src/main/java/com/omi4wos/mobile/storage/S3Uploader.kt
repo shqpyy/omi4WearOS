@@ -53,7 +53,10 @@ class S3Uploader(
             client.setEndpoint(config.endpoint)
         } else if (config.region.isNotBlank()) {
             // 没填 endpoint 但填了 region，用 AWS 标准 region
-            client.region = com.amazonaws.services.s3.model.Region.fromValue(config.region)
+            client.setRegion(com.amazonaws.regions.Region.getRegion(
+                runCatching { Regions.fromName(config.region) }.getOrNull()
+                    ?: Regions.DEFAULT_REGION
+            ))
         }
 
         return client
@@ -113,8 +116,10 @@ class S3Uploader(
         }
 
         try {
-            val exists = runCatching { s3Client.doesBucketExistV2(config.bucket) }
-                .getOrDefault(false)
+            val exists = runCatching {
+                // doesBucketExistV2 在某些 SDK 版本上不可见，退到 doesBucketExist
+                s3Client.doesBucketExist(config.bucket)
+            }.getOrDefault(false)
             if (exists) {
                 Pair(true, "Bucket '${config.bucket}' accessible on ${config.endpoint.ifBlank { config.region }}")
             } else {
