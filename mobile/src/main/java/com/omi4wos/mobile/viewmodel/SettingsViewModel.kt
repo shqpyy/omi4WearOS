@@ -145,8 +145,23 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     // ---- 通话录音监听 ----
+    // 开关即时生效: 拨动即保存 enabled 并启动/停止服务, 不依赖全局 Save。
     fun updatePhoneWatcherEnabled(value: Boolean) {
         _uiState.value = _uiState.value.copy(phoneWatcherEnabled = value)
+        viewModelScope.launch {
+            val current = omiConfig.getConfig()
+            omiConfig.saveConfig(
+                current.copy(phoneWatcher = current.phoneWatcher.copy(enabled = value))
+            )
+            val context = getApplication<Application>()
+            if (value) {
+                PhoneRecordingWatcherService.start(context)
+                RecordingWatcherWorker.schedule(context)
+            } else {
+                PhoneRecordingWatcherService.stop(context)
+                RecordingWatcherWorker.cancel(context)
+            }
+        }
     }
     fun updatePhoneWatchDir(value: String) {
         _uiState.value = _uiState.value.copy(phoneWatchDir = value)

@@ -99,40 +99,7 @@ fun SettingsScreen(
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // === 1. 存储方案选择 ===
-        StorageMethodCard(
-            uiState = uiState,
-            onMethodSelected = viewModel::updateStorageMethod
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // === 2. 对应方案的配置项 ===
-        when (uiState.storageMethod) {
-            OmiConfig.StorageMethod.LOCAL_FILE -> LocalFileConfigCard(
-                uiState = uiState,
-                onOutputDirChange = viewModel::updateLocalOutputDir
-            )
-            OmiConfig.StorageMethod.HTTP -> HttpConfigCard(
-                uiState = uiState,
-                onUrlChange = viewModel::updateHttpUploadUrl,
-                onKeyChange = viewModel::updateHttpApiKey
-            )
-            OmiConfig.StorageMethod.S3 -> S3ConfigCard(
-                uiState = uiState,
-                onEndpointChange = viewModel::updateS3Endpoint,
-                onBucketChange = viewModel::updateS3Bucket,
-                onAccessKeyChange = viewModel::updateS3AccessKey,
-                onSecretKeyChange = viewModel::updateS3SecretKey,
-                onRegionChange = viewModel::updateS3Region
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // === 3. Test / Save 按钮 ===
+        // === 存储测试 / 全量保存（放在页面顶部，避免被误认为 HTTP 专用）===
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -176,6 +143,46 @@ fun SettingsScreen(
             )
         }
 
+        Text(
+            text = context.getString(R.string.settings_save_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // === 1. 存储方案选择 ===
+        StorageMethodCard(
+            uiState = uiState,
+            onMethodSelected = viewModel::updateStorageMethod
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // === 2. 对应方案的配置项 ===
+        when (uiState.storageMethod) {
+            OmiConfig.StorageMethod.LOCAL_FILE -> LocalFileConfigCard(
+                uiState = uiState,
+                onOutputDirChange = viewModel::updateLocalOutputDir
+            )
+            OmiConfig.StorageMethod.HTTP -> HttpConfigCard(
+                uiState = uiState,
+                onUrlChange = viewModel::updateHttpUploadUrl,
+                onKeyChange = viewModel::updateHttpApiKey
+            )
+            OmiConfig.StorageMethod.S3 -> S3ConfigCard(
+                uiState = uiState,
+                onEndpointChange = viewModel::updateS3Endpoint,
+                onBucketChange = viewModel::updateS3Bucket,
+                onAccessKeyChange = viewModel::updateS3AccessKey,
+                onSecretKeyChange = viewModel::updateS3SecretKey,
+                onRegionChange = viewModel::updateS3Region
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // （Test / Save 已移至页面顶部，作用于全部设置）
         Spacer(modifier = Modifier.height(24.dp))
 
         // === 4. 通话录音监听 ===

@@ -77,4 +77,5 @@
     <string name='keepalive_autostart_unavailable_manual'>无法直接打开自启动管理，请前往：设置 > 应用 > 启动管理 手动开启</string>
     <string name='phone_watcher_selected'>监听目录</string>
     <string name='phone_watcher_none'>未选择</string>
+    <string name='settings_save_hint'>保存全部存储与监听设置（不仅是 HTTP）</string>
 </resources>

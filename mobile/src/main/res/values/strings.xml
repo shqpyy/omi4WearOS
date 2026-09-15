@@ -77,4 +77,5 @@
     <string name='keepalive_autostart_unavailable_manual'>Could not open auto-start directly. Please enable it manually: Settings > Apps > Startup management.</string>
     <string name='phone_watcher_selected'>Watch directory</string>
     <string name='phone_watcher_none'>Not selected</string>
+    <string name='settings_save_hint'>Save applies all storage &amp; watcher settings, not just HTTP.</string>
 </resources>
