@@ -70,4 +70,8 @@
     <string name='home_upload_pending_keep'>Local audio is kept on the phone until a successful upload.</string>
     <string name='home_upload_retry'>Retry now</string>
     <string name='home_upload_all_done'>All recordings uploaded</string>
+    <string name='language_restart_title'>Restart required</string>
+    <string name='language_restart_message'>Language takes effect after restart. Restart now?</string>
+    <string name='language_restart_now'>Restart now</string>
+    <string name='language_restart_later'>Not now</string>
 </resources>

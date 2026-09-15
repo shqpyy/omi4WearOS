@@ -70,4 +70,8 @@
     <string name='home_upload_pending_keep'>本地音频在上传成功前会一直保留在手机里。</string>
     <string name='home_upload_retry'>立即重试</string>
     <string name='home_upload_all_done'>所有录音已上传</string>
+    <string name='language_restart_title'>需要重启</string>
+    <string name='language_restart_message'>语言切换需重启后才能生效，现在重启？</string>
+    <string name='language_restart_now'>立即重启</string>
+    <string name='language_restart_later'>稍后</string>
 </resources>

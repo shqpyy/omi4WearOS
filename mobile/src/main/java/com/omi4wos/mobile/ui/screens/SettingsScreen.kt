@@ -1,6 +1,7 @@
 ﻿package com.omi4wos.mobile.ui.screens
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -18,9 +19,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -29,13 +32,16 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.res.stringResource
 import com.omi4wos.mobile.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -87,14 +93,6 @@ fun SettingsScreen(
         )
 
         Spacer(modifier = Modifier.height(24.dp))
-
-        // === 0. 语言切换 ===
-        LanguageCard(
-            uiState = uiState,
-            onLanguageSelected = viewModel::updateLanguage
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
 
         // === 1. 存储方案选择 ===
         StorageMethodCard(
@@ -199,6 +197,14 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // === 7. 语言切换（紧凑，底部） ===
+        LanguageCard(
+            uiState = uiState,
+            onLanguageSelected = viewModel::updateLanguage
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         SnackbarHost(hostState = snackbarHostState)
     }
 }
@@ -209,41 +215,79 @@ private fun LanguageCard(
     onLanguageSelected: (String) -> Unit
 ) {
     val context = LocalContext.current
+    var pendingRestart by remember { mutableStateOf(false) }
+
+    // 仅提供英文 / 中文。其他语言未翻译, 不提供"跟随系统"。
     val languages = listOf(
-        "system" to context.getString(R.string.language_system),
         "en" to context.getString(R.string.language_english),
         "zh-CN" to context.getString(R.string.language_chinese)
     )
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = context.getString(R.string.language_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            languages.forEach { (code, label) ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    RadioButton(
-                        selected = uiState.language == code,
-                        onClick = { onLanguageSelected(code) }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = context.getString(R.string.language_title) + ":",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                languages.forEach { (code, label) ->
+                    val selected = uiState.language == code
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            if (!selected) {
+                                onLanguageSelected(code)
+                                pendingRestart = true
+                            }
+                        },
+                        label = { Text(label, style = MaterialTheme.typography.bodySmall) }
                     )
-                    Text(
-                        text = label,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
             }
         }
     }
+
+    // 选中语言后弹框确认重启
+    if (pendingRestart) {
+        AlertDialog(
+            onDismissRequest = { pendingRestart = false },
+            title = { Text(context.getString(R.string.language_restart_title)) },
+            text = { Text(context.getString(R.string.language_restart_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingRestart = false
+                    restartApp(context)
+                }) { Text(context.getString(R.string.language_restart_now)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRestart = false }) {
+                    Text(context.getString(R.string.language_restart_later))
+                }
+            }
+        )
+    }
+}
+
+/** 重启应用以让语言切换生效 */
+private fun restartApp(context: Context) {
+    val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        ?: return
+    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+    context.startActivity(intent)
+    Runtime.getRuntime().exit(0)
 }
 
 @Composable
