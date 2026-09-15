@@ -28,12 +28,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,16 +50,6 @@ import java.util.Locale
 fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     val watcherStatus by WatcherStatus.status.collectAsState()
-
-    // 每次 HomeScreen 进入/恢复时主动查一次手表状态, 避免 StateFlow 初始值 false 假跳
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshWatchState()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
 
     Column(
         modifier = Modifier
@@ -189,29 +175,26 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // [未上传成功的提示] 有积压时显示醒目警示卡片, 0 积压则不显示
+        // [未上传成功的提示] 有积压时显示醒目警示卡片
         val hasPending = uiState.uploadFailures > 0 || uiState.pendingBytes > 0L
         if (hasPending) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                // 改用 MaterialTheme 语义色, 深色模式自动适配, 不再扎眼
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Sync,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onErrorContainer
+                            tint = Color(0xFFE65100)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = stringResource(R.string.home_upload_pending_title),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
+                            color = Color(0xFFE65100)
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
@@ -245,25 +228,28 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     }
                 }
             }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.home_upload_all_done),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF4CAF50)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
         if (uiState.recentSyncs.isEmpty()) {
             Text(
-                text = stringResource(R.string.home_no_syncs),
+                text = "No syncs yet. Uploads will appear here after the watch syncs.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
             LazyColumn {
                 items(uiState.recentSyncs) { sync ->
-                    val storageLabel = when (uiState.storageMethod) {
-                        "HTTP" -> "your HTTP server"
-                        "S3" -> "S3 storage"
-                        else -> "local storage"
-                    }
-                    SyncCard(sync, storageLabel)
+                    SyncCard(sync)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
@@ -272,7 +258,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 }
 
 @Composable
-private fun SyncCard(sync: SyncSummary, storageLabel: String) {
+private fun SyncCard(sync: SyncSummary) {
     val dateFmt = SimpleDateFormat("MM/dd/yy hh:mma", Locale.getDefault())
     val timeFmt = SimpleDateFormat("hh:mma", Locale.getDefault())
 
@@ -306,7 +292,7 @@ private fun SyncCard(sync: SyncSummary, storageLabel: String) {
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Uploaded to $storageLabel: $sizeStr  ($segStr)",
+                text = "Uploaded to Omi Cloud: $sizeStr  ($segStr)",
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace
             )

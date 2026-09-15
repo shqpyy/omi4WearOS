@@ -8,7 +8,6 @@ import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.Wearable
 import com.omi4wos.mobile.data.SyncSummary
 import com.omi4wos.mobile.data.UploadRepository
-import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.mobile.service.AudioReceiverService
 import com.omi4wos.mobile.service.AudioUploadService
 import com.omi4wos.mobile.service.runUploadRetry
@@ -30,8 +29,7 @@ data class HomeUiState(
     val totalUploads: Int = 0,
     val uploadFailures: Int = 0,
     val pendingBytes: Long = 0,
-    val recentSyncs: List<SyncSummary> = emptyList(),
-    val storageMethod: String = "LOCAL_FILE"
+    val recentSyncs: List<SyncSummary> = emptyList()
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -56,10 +54,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         observeState()
         queryWatchRecordingState()
         retryPendingUploads()
-        viewModelScope.launch {
-            val cfg = OmiConfig(getApplication()).getConfig()
-            _uiState.value = _uiState.value.copy(storageMethod = cfg.storageMethod.name)
-        }
     }
 
     override fun onCleared() {
@@ -132,12 +126,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun queryWatchRecordingState() {
         sendWatchCommand(DataLayerPaths.CMD_STATUS_REQUEST)
-    }
-
-    /** HomeScreen 每次进入 (resume) 时调用, 主动向手表查询最新录音状态,
-     *  避免 StateFlow 初始值 false 导致按钮状态假跳。 */
-    fun refreshWatchState() {
-        queryWatchRecordingState()
     }
 
     private fun sendWatchCommand(command: String) {
