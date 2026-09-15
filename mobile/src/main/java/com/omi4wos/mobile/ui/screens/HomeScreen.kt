@@ -88,7 +88,13 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-                    if (uiState.isReceivingAudio) {
+                    if (!uiState.watchConnected) {
+                        Text(
+                            text = "Watch not connected",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFB71C1C)
+                        )
+                    } else if (uiState.isReceivingAudio) {
                         Text(
                             text = "Receiving audio…",
                             style = MaterialTheme.typography.bodySmall,
@@ -101,9 +107,12 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                         if (uiState.watchRecordingEnabled) viewModel.stopWatchRecording()
                         else viewModel.startWatchRecording()
                     },
+                    enabled = uiState.watchConnected,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (uiState.watchRecordingEnabled)
-                            Color(0xFFB71C1C) else Color(0xFF1B5E20)
+                            Color(0xFFB71C1C) else Color(0xFF1B5E20),
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
                 ) {
                     Icon(
