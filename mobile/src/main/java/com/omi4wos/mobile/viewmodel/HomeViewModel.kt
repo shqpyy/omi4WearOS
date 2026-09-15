@@ -11,7 +11,9 @@ import com.omi4wos.mobile.data.UploadRepository
 import com.omi4wos.mobile.service.AudioReceiverService
 import com.omi4wos.mobile.service.AudioUploadService
 import com.omi4wos.mobile.service.runUploadRetry
+import com.omi4wos.mobile.storage.HttpUploader
 import com.omi4wos.shared.DataLayerPaths
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -26,6 +28,7 @@ data class HomeUiState(
     val watchBatteryLevel: Int = -1,
     val totalUploads: Int = 0,
     val uploadFailures: Int = 0,
+    val pendingBytes: Long = 0,
     val recentSyncs: List<SyncSummary> = emptyList()
 )
 
@@ -93,6 +96,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             )
         }.launchIn(viewModelScope)
 
+        // 周期性扫描待上传音频的占用空间 (轻量目录扫描, 5s 一次)
+        viewModelScope.launch {
+            while (true) {
+                val bytes = HttpUploader.getPendingBytes(getApplication())
+                if (_uiState.value.pendingBytes != bytes) {
+                    _uiState.value = _uiState.value.copy(pendingBytes = bytes)
+                }
+                delay(5_000)
+            }
+        }
     }
 
     fun retryPendingUploads() {

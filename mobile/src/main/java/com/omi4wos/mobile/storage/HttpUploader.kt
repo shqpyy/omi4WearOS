@@ -29,7 +29,8 @@ import java.util.concurrent.TimeUnit
  *   - 上传成功: 立即删除 bin 文件
  *   - 上传失败: 保留 bin 文件, 等待 UploadRetryWorker (15 min 周期) 重试
  *   - 重试成功: 删除 bin 文件 + 标记 uploaded=true
- *   - 超过 7 天的失败记录: 强制清理 bin 文件 (避免无限堆积)
+ *   - 未上传成功的音频永久保留, 不做超时清理. 只有上传成功才删.
+ *     (服务器可能宕机数天, 音频必须留存到成功上传为止)
  *
  * 测试连接: 发 HEAD 请求, 405/404 算可达 (FastAPI 上传接口只声明 POST)
  */
@@ -41,15 +42,26 @@ class HttpUploader(
     companion object {
         private const val TAG = "HttpUploader"
         const val SPEECH_AUDIO_DIR = "speech_audio"
-        const val MAX_PENDING_DAYS = 7L
 
         /**
-         * 统一中转文件目录, UploadRetryRunner / AudioUploadService 共用。
+         * 统一中转文件目录, UploadRetryRunner / HomeViewModel 共用。
          */
         fun getSpeechAudioDir(context: Context): File {
             val dir = File(context.filesDir, SPEECH_AUDIO_DIR)
             if (!dir.exists()) dir.mkdirs()
             return dir
+        }
+
+        /**
+         * 积压占用字节数: speech_audio 目录下所有待上传 bin 文件大小之和。
+         * 供 Home 页展示"未上传成功"的提示。
+         */
+        fun getPendingBytes(context: Context): Long {
+            return getSpeechAudioDir(context)
+                .listFiles()
+                ?.filter { it.isFile }
+                ?.sumOf { it.length() }
+                ?: 0L
         }
     }
 

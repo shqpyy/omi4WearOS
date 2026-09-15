@@ -65,4 +65,9 @@
     <string name='language_system'>跟随系统</string>
     <string name='language_english'>English</string>
     <string name='language_chinese'>中文</string>
+    <string name='home_upload_pending_title'>有录音待上传</string>
+    <string name='home_upload_pending_desc'>%1$d 段录音等待上传 · %2$s</string>
+    <string name='home_upload_pending_keep'>本地音频在上传成功前会一直保留在手机里。</string>
+    <string name='home_upload_retry'>立即重试</string>
+    <string name='home_upload_all_done'>所有录音已上传</string>
 </resources>

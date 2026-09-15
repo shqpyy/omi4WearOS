@@ -33,6 +33,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -115,27 +117,67 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // [Retry icon] Upload Failures: N
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = { viewModel.retryPendingUploads() },
-                modifier = Modifier.size(36.dp)
+        // [未上传成功的提示] 有积压时显示醒目警示卡片
+        val hasPending = uiState.uploadFailures > 0 || uiState.pendingBytes > 0L
+        if (hasPending) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
             ) {
-                Icon(
-                    imageVector = Icons.Default.Sync,
-                    contentDescription = "Retry failed uploads",
-                    tint = MaterialTheme.colorScheme.primary
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            tint = Color(0xFFE65100)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.home_upload_pending_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFE65100)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.home_upload_pending_desc,
+                            uiState.uploadFailures,
+                            formatSize(uiState.pendingBytes)
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.home_upload_pending_keep),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { viewModel.retryPendingUploads() },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(stringResource(R.string.home_upload_retry))
+                    }
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.home_upload_all_done),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF4CAF50)
                 )
             }
-            Text(
-                text = "Upload Failures: ${uiState.uploadFailures}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (uiState.uploadFailures > 0) Color(0xFFFFA000)
-                        else MaterialTheme.colorScheme.onSurface
-            )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
