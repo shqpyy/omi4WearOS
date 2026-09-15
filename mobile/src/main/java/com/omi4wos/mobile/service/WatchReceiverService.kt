@@ -7,7 +7,9 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.wearable.MessageClient
@@ -30,6 +32,16 @@ class WatchReceiverService : Service() {
     }
 
     private lateinit var messageClient: MessageClient
+
+    /** 周期刷新通知时间戳, 让状态栏显示相对时间(刚刚/几分钟前), 而非停滞的绝对时刻 */
+    private val handler = Handler(Looper.getMainLooper())
+    private val REFRESH_INTERVAL_MS = 30_000L // 30 秒刷新一次
+    private val refreshRunnable = object : Runnable {
+        override fun run() {
+            refreshNotification()
+            handler.postDelayed(this, REFRESH_INTERVAL_MS)
+        }
+    }
 
     private val messageListener = MessageClient.OnMessageReceivedListener { event ->
         Log.d(TAG, "Message received: ${event.path} size=${event.data.size}")
@@ -54,13 +66,26 @@ class WatchReceiverService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, createNotification())
         }
+        handler.removeCallbacks(refreshRunnable)
+        handler.postDelayed(refreshRunnable, REFRESH_INTERVAL_MS)
         return START_STICKY
+    }
+
+    /** 重建并重发通知, 时间戳随之刷新为当前时间 */
+    private fun refreshNotification() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, createNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(NOTIFICATION_ID, createNotification())
+        }
     }
 
     private fun createNotification(): Notification {
         return NotificationCompat.Builder(this, Constants.MOBILE_NOTIFICATION_CHANNEL_ID)
             .setContentTitle("omi4wOS")
             .setContentText("Listening for watch audio…")
+            .setWhen(System.currentTimeMillis())
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
             .setSilent(true)
@@ -78,6 +103,7 @@ class WatchReceiverService : Service() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(refreshRunnable)
         messageClient.removeListener(messageListener)
         Log.i(TAG, "Watch message listener unregistered")
         super.onDestroy()
