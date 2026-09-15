@@ -1,11 +1,7 @@
 package com.omi4wos.mobile.storage
 
 import android.content.Context
-import android.util.Log
 import com.omi4wos.mobile.omi.OmiConfig
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.File
 
 /**
  * 上传统一接口。三种实现：
@@ -51,8 +47,6 @@ interface StorageUploader {
     suspend fun testConnection(): Pair<Boolean, String>
 
     companion object {
-        private const val TAG = "StorageUploader"
-
         /**
          * 工厂方法：根据 [OmiConfig.Config.storageMethod] 创建对应实现。
          * 每次调用会从 DataStore 重新读取配置，保证拿到最新值。
@@ -62,29 +56,16 @@ interface StorageUploader {
             val config = omiConfig.getConfig()
             return when (config.storageMethod) {
                 OmiConfig.StorageMethod.LOCAL_FILE -> LocalFileUploader(context, config.localFile)
-                OmiConfig.StorageMethod.HTTP       -> HttpUploader(config.http)
+                OmiConfig.StorageMethod.HTTP       -> HttpUploader(config.http, context)
                 OmiConfig.StorageMethod.S3         -> S3Uploader(context, config.s3)
             }
         }
 
         /**
-         * 同步工厂：从 cacheDir 读取已有的临时 bin 文件并重新上传。
+         * 同步工厂：从 filesDir/speech_audio/ 读取已有的 bin 文件并重新上传。
          * 给 [com.omi4wos.mobile.service.UploadRetryRunner] 用。
+         * 实际等价于 [create], 因为 HttpUploader 内部会从中转目录读 bin 文件。
          */
         suspend fun createFromCache(context: Context): StorageUploader = create(context)
-
-        /** 写一段字节数组到 cacheDir 下的临时 bin 文件 */
-        suspend fun writeCacheFile(
-            context: Context,
-            audioData: ByteArray,
-            uploadName: String
-        ): File = withContext(Dispatchers.IO) {
-            val cachePath = File(context.cacheDir, "speech_audio")
-            if (!cachePath.exists()) cachePath.mkdirs()
-            val binFile = File(cachePath, uploadName)
-            java.io.FileOutputStream(binFile).use { it.write(audioData) }
-            Log.d(TAG, "Wrote cache file: ${binFile.absolutePath} (${audioData.size} bytes)")
-            binFile
-        }
     }
 }
