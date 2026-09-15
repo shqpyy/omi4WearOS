@@ -165,39 +165,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
     fun updatePhoneWatchDir(value: String) {
         _uiState.value = _uiState.value.copy(phoneWatchDir = value)
-        persistWatcher()
     }
     fun updatePhoneWatchTreeUri(value: String) {
         _uiState.value = _uiState.value.copy(phoneWatchTreeUri = value)
-        persistWatcher()
     }
     fun updatePhoneWatchPatterns(value: String) {
         _uiState.value = _uiState.value.copy(phoneWatchPatterns = value)
-        persistWatcher()
     }
     fun updatePhoneWatchInterval(value: Int) {
         _uiState.value = _uiState.value.copy(phoneWatchInterval = value)
-        persistWatcher()
-    }
-
-    /** 把当前内存态的 watcher 字段即时写入 DataStore, 让服务下次 scan 立刻读到 */
-    private fun persistWatcher() {
-        viewModelScope.launch {
-            val s = _uiState.value
-            val context = getApplication<Application>()
-            val existing = omiConfig.getConfig()
-            omiConfig.saveConfig(
-                existing.copy(
-                    phoneWatcher = OmiConfig.PhoneWatcherConfig(
-                        enabled = s.phoneWatcherEnabled,
-                        watchDir = s.phoneWatchDir.trim(),
-                        treeUri = s.phoneWatchTreeUri.trim(),
-                        filePatterns = s.phoneWatchPatterns.trim(),
-                        scanIntervalSec = s.phoneWatchInterval.coerceIn(15, 3600)
-                    )
-                )
-            )
-        }
     }
 
     // ---- 保存 ----
