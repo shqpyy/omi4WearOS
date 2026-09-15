@@ -26,7 +26,6 @@ import kotlinx.coroutines.tasks.await
 data class HomeUiState(
     val isReceivingAudio: Boolean = false,
     val watchRecordingEnabled: Boolean = false,
-    val watchConnected: Boolean = false,
     val watchBatteryLevel: Int = -1,
     val totalUploads: Int = 0,
     val uploadFailures: Int = 0,
@@ -60,16 +59,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val cfg = OmiConfig(getApplication()).getConfig()
             _uiState.value = _uiState.value.copy(storageMethod = cfg.storageMethod.name)
-        }
-        // 定期检查手表连接状态 (每 5 秒)
-        viewModelScope.launch {
-            while (true) {
-                val connected = runCatching {
-                    nodeClient.connectedNodes.await().isNotEmpty()
-                }.getOrDefault(false)
-                _uiState.value = _uiState.value.copy(watchConnected = connected)
-                delay(5_000)
-            }
         }
     }
 
@@ -132,40 +121,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startWatchRecording() {
-        // 先检查手表是否连接, 没连就不更新 UI 也不发命令
-        viewModelScope.launch {
-            val nodes = runCatching { nodeClient.connectedNodes.await() }.getOrDefault(emptyList())
-            if (nodes.isEmpty()) {
-                Log.w(TAG, "No watch connected, cannot start recording")
-                return@launch
-            }
-            _uiState.value = _uiState.value.copy(watchRecordingEnabled = true)
-            runCatching {
-                messageClient.sendMessage(
-                    nodes.first().id,
-                    DataLayerPaths.AUDIO_CONTROL_PATH,
-                    DataLayerPaths.CMD_START_RECORDING.toByteArray(Charsets.UTF_8)
-                ).await()
-            }.onFailure { Log.e(TAG, "Failed to send CMD_START_RECORDING", it) }
-        }
+        _uiState.value = _uiState.value.copy(watchRecordingEnabled = true)
+        sendWatchCommand(DataLayerPaths.CMD_START_RECORDING)
     }
 
     fun stopWatchRecording() {
-        viewModelScope.launch {
-            val nodes = runCatching { nodeClient.connectedNodes.await() }.getOrDefault(emptyList())
-            if (nodes.isEmpty()) {
-                Log.w(TAG, "No watch connected, cannot stop recording")
-                return@launch
-            }
-            _uiState.value = _uiState.value.copy(watchRecordingEnabled = false)
-            runCatching {
-                messageClient.sendMessage(
-                    nodes.first().id,
-                    DataLayerPaths.AUDIO_CONTROL_PATH,
-                    DataLayerPaths.CMD_STOP_RECORDING.toByteArray(Charsets.UTF_8)
-                ).await()
-            }.onFailure { Log.e(TAG, "Failed to send CMD_STOP_RECORDING", it) }
-        }
+        _uiState.value = _uiState.value.copy(watchRecordingEnabled = false)
+        sendWatchCommand(DataLayerPaths.CMD_STOP_RECORDING)
     }
 
     private fun queryWatchRecordingState() {
