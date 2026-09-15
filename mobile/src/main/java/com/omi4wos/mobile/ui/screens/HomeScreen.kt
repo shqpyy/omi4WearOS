@@ -175,26 +175,28 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // [未上传成功的提示] 有积压时显示醒目警示卡片
+        // [未上传成功的提示] 有积压时显示醒目警示卡片, 0 积压则不显示
         val hasPending = uiState.uploadFailures > 0 || uiState.pendingBytes > 0L
         if (hasPending) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Sync,
                             contentDescription = null,
-                            tint = Color(0xFFE65100)
+                            tint = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = stringResource(R.string.home_upload_pending_title),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFE65100)
+                            color = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
@@ -228,28 +230,25 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     }
                 }
             }
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.home_upload_all_done),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF4CAF50)
-                )
-            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
         if (uiState.recentSyncs.isEmpty()) {
             Text(
-                text = "No syncs yet. Uploads will appear here after the watch syncs.",
+                text = stringResource(R.string.home_no_syncs),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
+            val storageLabel = when (uiState.storageMethod) {
+                "HTTP" -> "your HTTP server"
+                "S3" -> "S3 storage"
+                else -> "local storage"
+            }
             LazyColumn {
                 items(uiState.recentSyncs) { sync ->
-                    SyncCard(sync)
+                    SyncCard(sync, storageLabel)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
@@ -258,7 +257,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 }
 
 @Composable
-private fun SyncCard(sync: SyncSummary) {
+private fun SyncCard(sync: SyncSummary, storageLabel: String) {
     val dateFmt = SimpleDateFormat("MM/dd/yy hh:mma", Locale.getDefault())
     val timeFmt = SimpleDateFormat("hh:mma", Locale.getDefault())
 
@@ -292,7 +291,7 @@ private fun SyncCard(sync: SyncSummary) {
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Uploaded to Omi Cloud: $sizeStr  ($segStr)",
+                text = "Uploaded to $storageLabel: $sizeStr  ($segStr)",
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace
             )
