@@ -172,6 +172,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         sendWatchCommand(DataLayerPaths.CMD_STATUS_REQUEST)
     }
 
+    /** HomeScreen 每次进入 (resume) 时调用, 主动向手表查询最新录音状态,
+     *  避免 StateFlow 初始值 false 导致按钮状态假跳。 */
+    fun refreshWatchState() {
+        queryWatchRecordingState()
+    }
+
     private fun sendWatchCommand(command: String) {
         viewModelScope.launch {
             try {
