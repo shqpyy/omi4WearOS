@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omi4wos.mobile.data.SyncSummary
+import com.omi4wos.mobile.service.WatcherStatus
 import com.omi4wos.mobile.viewmodel.HomeViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -48,6 +49,7 @@ import java.util.Locale
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
+    val watcherStatus by WatcherStatus.status.collectAsState()
 
     Column(
         modifier = Modifier
@@ -111,6 +113,62 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(if (uiState.watchRecordingEnabled) "Stop" else "Start")
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // [通话录音监听诊断] 无需 adb, 直接看最近一次扫描结果
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = stringResource(R.string.home_watcher_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                if (!watcherStatus.enabled) {
+                    Text(
+                        text = stringResource(R.string.home_watcher_off),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFB71C1C)
+                    )
+                } else {
+                    val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+                    Text(
+                        text = stringResource(
+                            R.string.home_watcher_summary,
+                            watcherStatus.watchDir.ifBlank { "-" },
+                            watcherStatus.scannedToday,
+                            watcherStatus.uploadedOk,
+                            watcherStatus.uploadFailed
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.home_watcher_last,
+                            if (watcherStatus.lastScanTime > 0L)
+                                timeFmt.format(Date(watcherStatus.lastScanTime))
+                            else "-"
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    watcherStatus.lastError?.let { err ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.home_watcher_error, err),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFB71C1C)
+                        )
+                    }
                 }
             }
         }

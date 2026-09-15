@@ -78,4 +78,9 @@
     <string name='phone_watcher_selected'>Watch directory</string>
     <string name='phone_watcher_none'>Not selected</string>
     <string name='settings_save_hint'>Save applies all storage &amp; watcher settings, not just HTTP.</string>
+    <string name='home_watcher_title'>Call recording watcher</string>
+    <string name='home_watcher_off'>Watcher is OFF - enable it in Settings</string>
+    <string name='home_watcher_summary'>Dir: %1$s · Today files: %2$d · Uploaded: %3$d · Failed: %4$d</string>
+    <string name='home_watcher_last'>Last scan: %1$s</string>
+    <string name='home_watcher_error'>Last error: %1$s</string>
 </resources>

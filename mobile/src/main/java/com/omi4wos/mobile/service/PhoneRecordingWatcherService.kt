@@ -22,11 +22,33 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+
+/** 最近一次通话录音扫描的结果, 暴露给 Home 诊断面板 (无需 adb)。 */
+data class WatcherScanStatus(
+    val lastScanTime: Long = 0L,
+    val watchDir: String = "",
+    val enabled: Boolean = false,
+    val scannedToday: Int = 0,
+    val matchedToUpload: Int = 0,
+    val uploadedOk: Int = 0,
+    val uploadFailed: Int = 0,
+    val lastError: String? = null
+)
+
+object WatcherStatus {
+    private val _flow = MutableStateFlow(WatcherScanStatus())
+    val status: StateFlow<WatcherScanStatus> = _flow.asStateFlow()
+    fun update(t: (WatcherScanStatus) -> WatcherScanStatus) { _flow.value = t(_flow.value) }
+}
 
 /**
  * 通话录音/手机本地音频监听服务。
@@ -132,11 +154,15 @@ class PhoneRecordingWatcherService : Service() {
         }
         if (patterns.isEmpty()) {
             Log.w(TAG, "No file patterns configured")
+            WatcherStatus.update { it.copy(lastScanTime = System.currentTimeMillis(), lastError = "No file patterns configured") }
             return
         }
 
+        val todayStart = todayStartMs()
         val startTime = System.currentTimeMillis()
         val newFiles = mutableListOf<Pair<String, ByteArray>>()
+        var scannedToday = 0
+        var errorMsg: String? = null
 
         try {
             if (watcher.treeUri.isNotBlank()) {
@@ -147,49 +173,74 @@ class PhoneRecordingWatcherService : Service() {
                         treeUri,
                         DocumentsContract.getTreeDocumentId(treeUri)
                     ),
-                    arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                    arrayOf(
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_LAST_MODIFIED
+                    ),
                     null, null, null
                 )
                 children?.use { c ->
                     val nameIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                    val modIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
                     while (c.moveToNext()) {
                         val name = if (nameIdx >= 0) c.getString(nameIdx) else continue
-                        if (matchesPatterns(name, patterns) && name !in processedFiles) {
+                        if (!matchesPatterns(name, patterns)) continue
+                        val lastMod = if (modIdx >= 0) c.getLong(modIdx) else 0L
+                        // 只处理当天的文件, 历史录音不传; lastMod<=0 表示时间未知, 保守视为当天
+                        if (lastMod > 0L && lastMod < todayStart) continue
+                        scannedToday++
+                        if (name !in processedFiles) {
                             val data = readFromSaf(treeUri, name)
                             if (data != null) newFiles.add(name to data)
                         }
                     }
+                    if (nameIdx < 0) errorMsg = "SAF query returned no columns (permission not granted?)"
                 }
             } else if (watcher.watchDir.isNotBlank()) {
                 // File 路径
                 val dir = File(watcher.watchDir)
                 if (!dir.exists()) {
-                    Log.w(TAG, "Watch dir not found: ${dir.absolutePath}")
-                    return
-                }
-                dir.listFiles()?.forEach { f ->
-                    if (f.isFile && matchesPatterns(f.name, patterns) && f.name !in processedFiles) {
-                        try {
-                            newFiles.add(f.name to f.readBytes())
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Cannot read ${f.name}", e)
+                    errorMsg = "Watch dir not found: ${dir.absolutePath}"
+                    Log.w(TAG, errorMsg)
+                } else {
+                    dir.listFiles()?.forEach { f ->
+                        if (!f.isFile || !matchesPatterns(f.name, patterns)) return@forEach
+                        if (f.lastModified() < todayStart) return@forEach // 只处理当天
+                        scannedToday++
+                        if (f.name !in processedFiles) {
+                            try { newFiles.add(f.name to f.readBytes()) }
+                            catch (e: Exception) { Log.w(TAG, "Cannot read ${f.name}", e) }
                         }
                     }
                 }
             } else {
-                Log.w(TAG, "No watch directory configured")
-                return
+                errorMsg = "No watch directory configured"
+                Log.w(TAG, errorMsg)
             }
         } catch (e: Exception) {
+            errorMsg = "Scan error: ${e.message}"
             Log.e(TAG, "Scan error", e)
-            return
+        }
+
+        val dirLabel = if (watcher.treeUri.isNotBlank()) watcher.treeUri else watcher.watchDir
+        WatcherStatus.update {
+            it.copy(
+                lastScanTime = System.currentTimeMillis(),
+                watchDir = dirLabel,
+                enabled = config.phoneWatcher.enabled,
+                scannedToday = scannedToday,
+                matchedToUpload = newFiles.size,
+                lastError = errorMsg
+            )
         }
 
         if (newFiles.isEmpty()) return
 
-        Log.i(TAG, "Found ${newFiles.size} new file(s), uploading via ${config.storageMethod.name}")
+        Log.i(TAG, "Found ${newFiles.size} new today's file(s), uploading via ${config.storageMethod.name}")
 
         val uploader = StorageUploader.create(applicationContext)
+        var okCount = 0
+        var failCount = 0
         for ((name, data) in newFiles) {
             try {
                 val uploadName = "phone_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}_${name}"
@@ -207,14 +258,28 @@ class PhoneRecordingWatcherService : Service() {
                 if (ok) {
                     processedFiles.add(name)
                     saveProcessedFiles()
+                    okCount++
                     Log.i(TAG, "Uploaded $name (${data.size} bytes)")
                 } else {
+                    failCount++
                     Log.w(TAG, "Upload failed for $name, will retry next scan")
                 }
             } catch (e: Exception) {
+                failCount++
                 Log.e(TAG, "Upload error for $name", e)
             }
         }
+        WatcherStatus.update { it.copy(uploadedOk = okCount, uploadFailed = failCount) }
+    }
+
+    /** 今天零点 (本地时区) 对应的毫秒时间戳。 */
+    private fun todayStartMs(): Long {
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
     }
 
     private fun matchesPatterns(name: String, exts: List<String>): Boolean {

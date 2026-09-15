@@ -78,4 +78,9 @@
     <string name='phone_watcher_selected'>监听目录</string>
     <string name='phone_watcher_none'>未选择</string>
     <string name='settings_save_hint'>保存全部存储与监听设置（不仅是 HTTP）</string>
+    <string name='home_watcher_title'>通话录音监听</string>
+    <string name='home_watcher_off'>监听已关闭 - 请在设置中开启</string>
+    <string name='home_watcher_summary'>目录: %1$s · 当日文件: %2$d · 已上传: %3$d · 失败: %4$d</string>
+    <string name='home_watcher_last'>最近扫描: %1$s</string>
+    <string name='home_watcher_error'>最近错误: %1$s</string>
 </resources>
