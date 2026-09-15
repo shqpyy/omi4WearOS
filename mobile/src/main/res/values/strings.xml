@@ -74,4 +74,7 @@
     <string name='language_restart_message'>Language takes effect after restart. Restart now?</string>
     <string name='language_restart_now'>Restart now</string>
     <string name='language_restart_later'>Not now</string>
+    <string name='keepalive_autostart_unavailable_manual'>Couldn't open auto-start directly. Please enable it manually: Settings > Apps > Startup management.</string>
+    <string name='phone_watcher_selected'>Watch directory</string>
+    <string name='phone_watcher_none'>Not selected</string>
 </resources>

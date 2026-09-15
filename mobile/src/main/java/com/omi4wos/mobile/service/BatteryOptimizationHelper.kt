@@ -94,10 +94,14 @@ object BatteryOptimizationHelper {
                 Intent().apply { setClassName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity") }
             )
             mfr.contains("huawei") || mfr.contains("honor") -> listOf(
-                // EMUI 旧版
+                // EMUI 8-10 经典入口
                 Intent().apply { setClassName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity") },
-                // HarmonyOS 新版（应用启动管理）
+                // HarmonyOS 应用启动管理
                 Intent().apply { setClassName("com.huawei.systemmanager", "com.huawei.systemmanager.appcontrol.HwFrozeAppListActivity") },
+                // HarmonyOS 3+ 自启动管理
+                Intent().apply { setClassName("com.huawei.systemmanager", "com.huawei.systemmanager.appcontrol.IAutostartActivity") },
+                // HarmonyOS 4.x 自启动管理
+                Intent().apply { setClassName("com.huawei.systemmanager", "com.huawei.systemmanager.appcontrol.hiau.HiAppSelfStartManagementActivity") },
                 // 省电模式 / 锁屏清理
                 Intent().apply { setClassName("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity") },
                 // 鸿蒙纯净模式

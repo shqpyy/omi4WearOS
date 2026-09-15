@@ -20,11 +20,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -49,6 +54,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omi4wos.mobile.omi.OmiConfig
@@ -176,7 +182,6 @@ fun SettingsScreen(
         PhoneWatcherCard(
             uiState = uiState,
             onEnabledChange = viewModel::updatePhoneWatcherEnabled,
-            onDirChange = viewModel::updatePhoneWatchDir,
             onPickDir = { pickDirLauncher.launch(null) },
             onClearTreeUri = { viewModel.updatePhoneWatchTreeUri("") },
             onPatternsChange = viewModel::updatePhoneWatchPatterns,
@@ -291,6 +296,24 @@ private fun restartApp(context: Context) {
     Runtime.getRuntime().exit(0)
 }
 
+/**
+ * 把 SAF tree URI 转成可读目录路径。
+ * content://.../tree/primary%3ARecord%2FCallRecord → /Record/CallRecord
+ * URI 为空 → 返回 [noneText]。
+ * 识别失败 → 原样返回 URI。
+ */
+private fun treeUriToDisplay(uri: String, noneText: String): String {
+    if (uri.isBlank()) return noneText
+    return try {
+        val seg = Uri.parse(uri).lastPathSegment ?: return uri
+        val decoded = java.net.URLDecoder.decode(seg, "UTF-8")
+        val rel = decoded.substringAfter(":", decoded)
+        "/" + rel.trim('/')
+    } catch (_: Exception) {
+        uri
+    }
+}
+
 @Composable
 private fun StorageMethodCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
@@ -381,18 +404,27 @@ private fun HttpConfigCard(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
         )
         Spacer(modifier = Modifier.height(12.dp))
+        var showHttpKey by remember { mutableStateOf(false) }
         OutlinedTextField(
             value = uiState.httpApiKey,
             onValueChange = onKeyChange,
             label = { Text(context.getString(R.string.http_api_key)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+            visualTransformation = if (showHttpKey) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { showHttpKey = !showHttpKey }) {
+                    Icon(
+                        imageVector = if (showHttpKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = if (showHttpKey) "Hidden" else "Visible"
+                    )
+                }
+            }
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "multipart/form-data POST, field name \"files\".",
+            text = "multipart/form-data POST, field name \"file\".",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -468,7 +500,6 @@ private fun S3ConfigCard(
 private fun PhoneWatcherCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
     onEnabledChange: (Boolean) -> Unit,
-    onDirChange: (String) -> Unit,
     onPickDir: () -> Unit,
     onClearTreeUri: () -> Unit,
     onPatternsChange: (String) -> Unit,
@@ -530,29 +561,26 @@ private fun PhoneWatcherCard(
                     }
                 }
 
-                if (uiState.phoneWatchTreeUri.isNotEmpty()) {
-                    Text(
-                        text = "URI: ${uiState.phoneWatchTreeUri.take(80)}${if (uiState.phoneWatchTreeUri.length > 80) "..." else ""}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-
                 Spacer(modifier = Modifier.height(12.dp))
+
+                // 只读展示所选目录（SAF 授权路径, 只看不可改）
                 Text(
-                    text = context.getString(R.string.phone_watcher_or_path),
+                    text = context.getString(R.string.phone_watcher_selected) + ":",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = uiState.phoneWatchDir,
-                    onValueChange = onDirChange,
-                    label = { Text(context.getString(R.string.phone_watcher_dir)) },
-                    placeholder = { Text("/sdcard/Record/CallRecord/") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = treeUriToDisplay(
+                        uiState.phoneWatchTreeUri,
+                        context.getString(R.string.phone_watcher_none)
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (uiState.phoneWatchTreeUri.isNotEmpty())
+                        MaterialTheme.colorScheme.onSurface
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -632,17 +660,12 @@ private fun KeepAliveCard(
                 onClick = {
                     val opened = BatteryOptimizationHelper.openAutoStartSettings(context)
                     if (!opened) {
-                        // 厂商自启动页都打不开 → 退到应用详情页（电池/启动 tab）
-                        val fallback = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                            .setData(Uri.parse("package:${context.packageName}"))
-                        runCatching { context.startActivity(fallback) }
-                            .onFailure {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        context.getString(R.string.keepalive_autostart_unavailable, it.message ?: "")
-                                    )
-                                }
-                            }
+                        // 厂商自启动页打不开 → 明确提示手动路径, 避免和"应用信息"按钮混淆
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                context.getString(R.string.keepalive_autostart_unavailable_manual)
+                            )
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth()

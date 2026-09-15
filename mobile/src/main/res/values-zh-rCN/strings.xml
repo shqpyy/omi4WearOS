@@ -74,4 +74,7 @@
     <string name='language_restart_message'>语言切换需重启后才能生效，现在重启？</string>
     <string name='language_restart_now'>立即重启</string>
     <string name='language_restart_later'>稍后</string>
+    <string name='keepalive_autostart_unavailable_manual'>无法直接打开自启动管理，请前往：设置 > 应用 > 启动管理 手动开启</string>
+    <string name='phone_watcher_selected'>监听目录</string>
+    <string name='phone_watcher_none'>未选择</string>
 </resources>
