@@ -84,5 +84,4 @@
     <string name='home_watcher_last'>Last scan: %1$s</string>
     <string name='home_watcher_error'>Last error: %1$s</string>
     <string name='home_no_syncs'>No syncs yet. Uploads will appear here after the watch syncs.</string>
-    <string name='home_upload_all_done'>All recordings uploaded ✓</string>
 </resources>
