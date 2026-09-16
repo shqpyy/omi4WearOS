@@ -90,4 +90,17 @@
     <string name='home_watcher_summary'>目录: %1$s · 当日文件: %2$d · 已上传: %3$d · 失败: %4$d</string>
     <string name='home_watcher_last'>最近扫描: %1$s</string>
     <string name='home_watcher_error'>最近错误: %1$s</string>
+
+    <string name='home_location_title'>位置上报</string>
+    <string name='home_location_off'>未授予定位权限</string>
+    <string name='home_location_off_hint'>没有定位权限时 App 无法上报位置。点「去授权」，在设置里选择「始终允许」。</string>
+    <string name='home_location_grant'>去授权</string>
+    <string name='home_location_bg_missing'>后台定位权限缺失 — 请在设置里选「始终允许」</string>
+    <string name='home_location_not_configured'>未配置 HTTP 上传地址</string>
+    <string name='home_location_summary'>%1$s · 精度 %2$s · 成功 %3$d / 失败 %4$d</string>
+    <string name='home_location_coords'>%1$.5f, %2$.5f（%3$s）</string>
+    <string name='home_location_last_ok'>最近成功: %1$s</string>
+    <string name='home_location_never'>从未</string>
+    <string name='home_location_error'>最近错误: %1$s</string>
+    <string name='home_location_upload_now'>立即上报</string>
 </resources>

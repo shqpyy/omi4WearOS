@@ -90,4 +90,17 @@
     <string name='home_watcher_summary'>Dir: %1$s · Today files: %2$d · Uploaded: %3$d · Failed: %4$d</string>
     <string name='home_watcher_last'>Last scan: %1$s</string>
     <string name='home_watcher_error'>Last error: %1$s</string>
+
+    <string name='home_location_title'>Location upload</string>
+    <string name='home_location_off'>Location permission not granted</string>
+    <string name='home_location_off_hint'>Without location permission the app cannot report your position. Tap "Grant" and choose "Allow all the time".</string>
+    <string name='home_location_grant'>Grant</string>
+    <string name='home_location_bg_missing'>Background location missing — choose "Allow all the time" in settings</string>
+    <string name='home_location_not_configured'>HTTP upload URL not configured</string>
+    <string name='home_location_summary'>%1$s · acc %2$s · OK %3$d / fail %4$d</string>
+    <string name='home_location_coords'>%1$.5f, %2$.5f (%3$s)</string>
+    <string name='home_location_last_ok'>Last success: %1$s</string>
+    <string name='home_location_never'>never</string>
+    <string name='home_location_error'>Last error: %1$s</string>
+    <string name='home_location_upload_now'>Report now</string>
 </resources>

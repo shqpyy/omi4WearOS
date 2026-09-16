@@ -64,25 +64,39 @@ class WatchReceiverService : Service() {
         if (locationUploader == null) {
             locationUploader = LocationUploader(applicationContext).also { it.start() }
         }
-        // Android 14+ requires the service type to be passed to startForeground()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, createNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(NOTIFICATION_ID, createNotification())
-        }
         handler.removeCallbacks(refreshRunnable)
         handler.postDelayed(refreshRunnable, REFRESH_INTERVAL_MS)
+        startOrRefreshForeground()
         return START_STICKY
     }
 
     /** 重建并重发通知, 时间戳随之刷新为当前时间 */
     private fun refreshNotification() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, createNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        startOrRefreshForeground()
+    }
+
+    /**
+     * 以 dataSync (+ 可选的 location) 类型进入/刷新前台。
+     *
+     * Android 14 起，startForeground 传入的类型必须在运行时具备对应权限，否则抛
+     * SecurityException。因此只有真正拿到定位权限时才叠加 LOCATION 类型。
+     */
+    private fun startOrRefreshForeground() {
+        val notification = createNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            if (LocationUploader.hasLocationPermission(this)) {
+                types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            }
+            try {
+                startForeground(NOTIFICATION_ID, notification, types)
+            } catch (e: Exception) {
+                Log.w(TAG, "startForeground with type $types failed, retrying dataSync only", e)
+                startForeground(NOTIFICATION_ID, notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            }
         } else {
-            startForeground(NOTIFICATION_ID, createNotification())
+            startForeground(NOTIFICATION_ID, notification)
         }
     }
 

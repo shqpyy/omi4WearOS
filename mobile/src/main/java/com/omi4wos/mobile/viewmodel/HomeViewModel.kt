@@ -11,6 +11,9 @@ import com.omi4wos.mobile.data.UploadRepository
 import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.mobile.service.AudioReceiverService
 import com.omi4wos.mobile.service.AudioUploadService
+import com.omi4wos.mobile.service.LocationStatus
+import com.omi4wos.mobile.service.LocationUploadStatus
+import com.omi4wos.mobile.service.LocationUploader
 import com.omi4wos.mobile.service.runUploadRetry
 import com.omi4wos.mobile.storage.HttpUploader
 import com.omi4wos.shared.DataLayerPaths
@@ -31,7 +34,9 @@ data class HomeUiState(
     val uploadFailures: Int = 0,
     val pendingBytes: Long = 0,
     val recentSyncs: List<SyncSummary> = emptyList(),
-    val storageMethod: OmiConfig.StorageMethod = OmiConfig.StorageMethod.LOCAL_FILE
+    val storageMethod: OmiConfig.StorageMethod = OmiConfig.StorageMethod.LOCAL_FILE,
+    val location: LocationUploadStatus = LocationUploadStatus(),
+    val locationBusy: Boolean = false
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -61,6 +66,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val method = OmiConfig(getApplication()).getConfig().storageMethod
             _uiState.value = _uiState.value.copy(storageMethod = method)
         }
+        // 定位上报状态 (权限/最近成败/坐标)
+        viewModelScope.launch {
+            LocationStatus.status.collect { status ->
+                _uiState.value = _uiState.value.copy(location = status)
+            }
+        }
+        viewModelScope.launch { LocationUploader.refreshStatus(getApplication()) }
     }
 
     override fun onCleared() {
@@ -118,6 +130,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun retryPendingUploads() {
         viewModelScope.launch {
             runUploadRetry(getApplication())
+        }
+    }
+
+    /** 手动立即上报一次定位（Home 页按钮），并刷新权限状态。 */
+    fun uploadLocationNow() {
+        if (_uiState.value.locationBusy) return
+        _uiState.value = _uiState.value.copy(locationBusy = true)
+        viewModelScope.launch {
+            try {
+                LocationUploader.uploadNow(getApplication())
+            } finally {
+                _uiState.value = _uiState.value.copy(locationBusy = false)
+            }
         }
     }
 

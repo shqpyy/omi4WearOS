@@ -30,9 +30,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -43,9 +45,13 @@ import com.omi4wos.mobile.data.SyncSummary
 import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.mobile.service.WatcherStatus
 import com.omi4wos.mobile.viewmodel.HomeViewModel
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
@@ -176,6 +182,10 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        LocationCard(viewModel = viewModel, uiState = uiState)
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         // [未上传成功的提示] 有积压时显示醒目警示卡片
         val hasPending = uiState.uploadFailures > 0 || uiState.pendingBytes > 0L
         if (hasPending) {
@@ -254,6 +264,165 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 items(uiState.recentSyncs) { sync ->
                     SyncCard(sync, uiState.storageMethod)
                     Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocationCard(viewModel: HomeViewModel, uiState: com.omi4wos.mobile.viewmodel.HomeUiState) {
+    val context = LocalContext.current
+    val loc = uiState.location
+    val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+
+    val badColor = Color(0xFFB71C1C)
+    val okColor = Color(0xFF4CAF50)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = stringResource(R.string.home_location_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+
+            when {
+                !loc.hasPermission -> {
+                    Text(
+                        text = stringResource(R.string.home_location_off),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = badColor
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.home_location_off_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                !loc.hasBackgroundPermission -> {
+                    Text(
+                        text = stringResource(R.string.home_location_bg_missing),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFFFA000)
+                    )
+                }
+
+                !loc.endpointConfigured -> {
+                    Text(
+                        text = stringResource(R.string.home_location_not_configured),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = badColor
+                    )
+                }
+
+                else -> {
+                    val sourceLabel = loc.lastSource.ifBlank { "-" }
+                    Text(
+                        text = if (loc.lastLat != null && loc.lastLon != null) {
+                            stringResource(
+                                R.string.home_location_summary,
+                                sourceLabel,
+                                "${loc.lastAccuracyM.roundToInt()}m",
+                                loc.uploadedOk,
+                                loc.uploadFailed
+                            )
+                        } else {
+                            stringResource(
+                                R.string.home_location_summary,
+                                "-", "-", loc.uploadedOk, loc.uploadFailed
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    if (loc.lastLat != null && loc.lastLon != null) {
+                        Text(
+                            text = stringResource(
+                                R.string.home_location_coords,
+                                loc.lastLat, loc.lastLon, sourceLabel
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = stringResource(
+                            R.string.home_location_last_ok,
+                            if (loc.lastSuccessAt > 0L)
+                                timeFmt.format(Date(loc.lastSuccessAt))
+                            else stringResource(R.string.home_location_never)
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = okColor
+                    )
+                }
+            }
+
+            loc.lastError?.let { err ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.home_location_error, err),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = badColor
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!loc.hasPermission || !loc.hasBackgroundPermission) {
+                    Button(onClick = {
+                        if (!loc.hasPermission) {
+                            // 前台权限还没给 —— 直接弹系统权限框
+                            val activity = context as? android.app.Activity
+                            if (activity != null) {
+                                androidx.core.app.ActivityCompat.requestPermissions(
+                                    activity,
+                                    arrayOf(
+                                        android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                    ),
+                                    4102
+                                )
+                            }
+                        } else {
+                            // 后台定位（「始终允许」）只能在系统设置里选，Android 11+ 无独立弹窗
+                            try {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                )
+                            } catch (_: Exception) {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                )
+                            }
+                        }
+                    }) {
+                        Text(stringResource(R.string.home_location_grant))
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Button(
+                    onClick = { viewModel.uploadLocationNow() },
+                    enabled = !uiState.locationBusy && loc.hasPermission
+                ) {
+                    Text(stringResource(R.string.home_location_upload_now))
                 }
             }
         }
