@@ -9,6 +9,7 @@ import com.google.android.gms.wearable.Wearable
 import com.omi4wos.mobile.data.SyncSummary
 import com.omi4wos.mobile.data.UploadRepository
 import com.omi4wos.mobile.omi.OmiConfig
+import com.omi4wos.mobile.service.AppLog
 import com.omi4wos.mobile.service.AudioReceiverService
 import com.omi4wos.mobile.service.AudioUploadService
 import com.omi4wos.mobile.service.CrashLogger
@@ -38,7 +39,9 @@ data class HomeUiState(
     val storageMethod: OmiConfig.StorageMethod = OmiConfig.StorageMethod.LOCAL_FILE,
     val location: LocationUploadStatus = LocationUploadStatus(),
     val locationBusy: Boolean = false,
-    val lastCrash: String? = null
+    val lastCrash: String? = null,
+    /** 日志文件占用（人类可读），展示在首页日志卡片。 */
+    val logSize: String = "-"
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -52,7 +55,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // Direct listener — catches messages when WearableListenerService is not triggered (Samsung)
     private val messageListener = MessageClient.OnMessageReceivedListener { event ->
         Log.d(TAG, "Direct message received: ${event.path} size=${event.data.size}")
-        AudioReceiverService.processMessage(getApplication(), event.path, event.data)
+        // 监听器回调里未捕获的异常会直接杀死进程（用户没点任何按钮也会闪退）
+        runCatching {
+            AudioReceiverService.processMessage(getApplication(), event.path, event.data)
+        }.onFailure {
+            Log.e(TAG, "processMessage failed", it)
+            AppLog.e(TAG, "处理手表消息失败(界面监听): ${event.path}", it)
+        }
     }
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -77,6 +86,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { LocationUploader.refreshStatus(getApplication()) }
         // 上次崩溃的堆栈(如果有), 直接摆在首页便于远程排错
         _uiState.value = _uiState.value.copy(lastCrash = CrashLogger.last(getApplication()))
+        refreshLogInfo()
+    }
+
+    /** 刷新日志体积，展示在首页「应用日志」卡片。 */
+    private fun refreshLogInfo() {
+        val app = getApplication<Application>()
+        _uiState.value = _uiState.value.copy(logSize = formatKb(AppLog.totalBytes(app)))
+    }
+
+    /** 导出日志（系统分享）。无日志时内部会提示，返回 false。 */
+    fun exportLog() {
+        val app = getApplication<Application>()
+        CrashLogger.markStep(app, "点击 导出日志")
+        AppLog.share(app)
+        refreshLogInfo()
+    }
+
+    /** 清空日志文件。 */
+    fun clearLog() {
+        val app = getApplication<Application>()
+        AppLog.clear(app)
+        refreshLogInfo()
+    }
+
+    private fun formatKb(bytes: Long): String = when {
+        bytes < 1024L -> "$bytes B"
+        bytes < 1048576L -> "${bytes / 1024} KB"
+        else -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1048576.0)
     }
 
     override fun onCleared() {

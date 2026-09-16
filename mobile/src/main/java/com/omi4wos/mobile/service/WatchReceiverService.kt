@@ -39,20 +39,29 @@ class WatchReceiverService : Service() {
     private val REFRESH_INTERVAL_MS = 30_000L // 30 秒刷新一次
     private val refreshRunnable = object : Runnable {
         override fun run() {
-            refreshNotification()
+            runCatching { refreshNotification() }
+                .onFailure { AppLog.e(TAG, "刷新通知失败", it) }
             handler.postDelayed(this, REFRESH_INTERVAL_MS)
         }
     }
 
     private val messageListener = MessageClient.OnMessageReceivedListener { event ->
         Log.d(TAG, "Message received: ${event.path} size=${event.data.size}")
-        AudioReceiverService.processMessage(applicationContext, event.path, event.data)
+        runCatching {
+            AudioReceiverService.processMessage(applicationContext, event.path, event.data)
+        }.onFailure {
+            // 监听器回调里任何异常都会直接杀死进程 —— 必须就地拦截
+            Log.e(TAG, "processMessage failed", it)
+            AppLog.e(TAG, "处理手表消息失败: ${event.path}", it)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        AppLog.ensure(applicationContext)
+        AppLog.i(TAG, "onCreate: 注册手表消息监听")
         createNotificationChannel()
         messageClient = Wearable.getMessageClient(this)
         messageClient.addListener(messageListener)
@@ -62,7 +71,7 @@ class WatchReceiverService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // 定位采样: 只在服务进程中初始化一次 (START_STICKY 可能多次回调 onStartCommand)
         if (locationUploader == null) {
-            locationUploader = LocationUploader(applicationContext).also { it.start() }
+            locationUploader = LocationUploader.get(applicationContext).also { it.startOnce() }
         }
         handler.removeCallbacks(refreshRunnable)
         handler.postDelayed(refreshRunnable, REFRESH_INTERVAL_MS)
@@ -92,6 +101,7 @@ class WatchReceiverService : Service() {
                 startForeground(NOTIFICATION_ID, notification, types)
             } catch (e: Exception) {
                 Log.w(TAG, "startForeground with type $types failed, retrying dataSync only", e)
+                AppLog.w(TAG, "前台服务类型 $types 启动失败，回落 dataSync", e)
                 startForeground(NOTIFICATION_ID, notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
             }
@@ -127,6 +137,7 @@ class WatchReceiverService : Service() {
         locationUploader = null
         messageClient.removeListener(messageListener)
         Log.i(TAG, "Watch message listener unregistered")
+        AppLog.i(TAG, "onDestroy: 注销手表消息监听")
         super.onDestroy()
     }
 }

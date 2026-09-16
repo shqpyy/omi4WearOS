@@ -19,6 +19,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.omi4wos.mobile.omi.OmiConfig
+import com.omi4wos.mobile.service.AppLog
 import com.omi4wos.mobile.service.CrashLogger
 import com.omi4wos.mobile.service.UploadRetryWorker
 import com.omi4wos.mobile.service.WatchReceiverService
@@ -56,7 +57,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 最早时机安装崩溃记录器: 崩溃堆栈落盘, 下次打开在首页可见
+        // 最早时机安装日志 + 崩溃记录器: 崩溃堆栈落盘, 下次打开在首页可见/可导出
+        AppLog.install(this)
         CrashLogger.install(this)
         // Start the persistent foreground service that receives watch messages
         ContextCompat.startForegroundService(
@@ -75,10 +77,6 @@ class MainActivity : ComponentActivity() {
      * 若用户拒绝, LocationUploader 会自动跳过采样, 后续可在系统设置重新授权。
      */
     private fun maybeRequestLocationPermission() {
-        val prefs = getSharedPreferences("permissions", MODE_PRIVATE)
-        if (prefs.getBoolean("location_asked", false)) return
-        prefs.edit().putBoolean("location_asked", true).apply()
-
         val needed = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
@@ -86,6 +84,7 @@ class MainActivity : ComponentActivity() {
 
         if (needed.isNotEmpty()) {
             Log.i(TAG, "Requesting location permission for periodic upload")
+            AppLog.i(TAG, "请求定位权限: ${needed.joinToString()}")
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), LOCATION_PERMISSION_CODE)
         }
     }
@@ -104,6 +103,7 @@ class MainActivity : ComponentActivity() {
             request
         )
         Log.i(TAG, "Upload retry worker scheduled (15 min, network-constrained)")
+        AppLog.i(TAG, "启动完成: 前台服务已拉起, 重试 Worker 已排程")
     }
 
     /**

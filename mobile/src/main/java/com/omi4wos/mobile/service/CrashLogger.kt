@@ -37,6 +37,8 @@ object CrashLogger {
                 val step = lastStep(appContext)
                 val summary = buildSummary(thread, throwable, step)
                 Log.e(TAG, summary)
+                // 崩溃本身由 AppLog 的异常处理器写入日志文件（链式调用会走到它），
+                // 此处不重复写，避免同一崩溃在日志里出现两遍。
                 // commit() 同步落盘：崩溃瞬间 apply() 的异步写可能丢
                 appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .edit().putString(KEY_LAST, summary).commit()
@@ -64,6 +66,7 @@ object CrashLogger {
             val stamp = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit().putString(KEY_STEP, "$stamp  $step").commit()
+            AppLog.i("Step", step)
         }
     }
 

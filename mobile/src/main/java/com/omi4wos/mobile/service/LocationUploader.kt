@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
@@ -88,6 +89,15 @@ class LocationUploader(private val context: Context) {
         /** 主动定位超时。 */
         private const val FRESH_FIX_TIMEOUT_MS = 12_000L
 
+        /** 仅允许应用 Context，禁止持有 Activity，除非显式调用 [stop]。 */
+        @Volatile private var instance: LocationUploader? = null
+
+        /** 服务进程内的单例（幂等启动，避免 START_STICKY 多次回调堆叠采样循环）。 */
+        @JvmStatic
+        fun get(context: Context): LocationUploader = instance ?: synchronized(this) {
+            instance ?: LocationUploader(context.applicationContext).also { instance = it }
+        }
+
         /** 前台定位权限（FINE/COARSE 任一即可）。 */
         fun hasLocationPermission(context: Context): Boolean = runCatching {
             val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -127,8 +137,9 @@ class LocationUploader(private val context: Context) {
          */
         suspend fun uploadNow(context: Context): Boolean {
             return try {
-                refreshStatus(context)
-                performSample(context, maxAgeMs = MANUAL_CACHE_MAX_AGE_MS, allowFreshFix = true)
+                val app = context.applicationContext
+                refreshStatus(app)
+                performSample(app, maxAgeMs = MANUAL_CACHE_MAX_AGE_MS, allowFreshFix = true)
             } catch (t: Throwable) {
                 Log.e(TAG, "Manual location upload failed", t)
                 recordFailure("手动上报异常: ${describe(t)}")
@@ -138,10 +149,12 @@ class LocationUploader(private val context: Context) {
 
         /** 一次完整的采样→上传流程，所有结果写入 [LocationStatus]。 */
         private suspend fun performSample(
-            context: Context,
+            rawContext: Context,
             maxAgeMs: Long,
             allowFreshFix: Boolean
         ): Boolean {
+            // 强制使用应用 Context：绝不能持有 Activity/View 引用，否则活动销毁后会泄漏甚至崩溃
+            val context = rawContext.applicationContext
             LocationStatus.update { it.copy(lastAttemptAt = System.currentTimeMillis()) }
 
             if (!hasLocationPermission(context)) {
@@ -149,8 +162,10 @@ class LocationUploader(private val context: Context) {
                 return false
             }
 
-            // 1) 先用系统缓存（与周期采样同一条路径，零风险）
-            lastKnownBest(context, maxAgeMs)?.let { return uploadSample(context, it) }
+            // 1) 缓存命中 → 转后台线程，避免占用协程主调度器
+            lastKnownBest(context, maxAgeMs)?.let { cached ->
+                return withContext(Dispatchers.IO) { runCatchingUpload(context, cached) }
+            }
 
             if (!allowFreshFix) {
                 recordFailure("无可用位置（系统定位缓存为空或已过期）")
@@ -175,8 +190,18 @@ class LocationUploader(private val context: Context) {
                 )
                 return false
             }
-            return uploadSample(context, fresh)
+            return withContext(Dispatchers.IO) { runCatchingUpload(context, fresh) }
         }
+
+        /** 上传一层额外兜底：即使 uploadSample 本身抛异常，也只记录不崩。 */
+        private suspend fun runCatchingUpload(context: Context, location: Location): Boolean =
+            try {
+                uploadSample(context, location)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Location upload failed", t)
+                recordFailure("上报异常: ${describe(t)}")
+                false
+            }
 
         /** 把一条位置 POST 到 /location，并把结果写入状态。 */
         private suspend fun uploadSample(context: Context, location: Location): Boolean {
@@ -230,8 +255,10 @@ class LocationUploader(private val context: Context) {
 
         /** 异常摘要：类名 + 消息 + 第一个业务栈帧（便于远程排错）。 */
         private fun describe(t: Throwable): String {
-            val frame = t.stackTrace.firstOrNull { it.className.startsWith("com.omi4wos") }
-                ?: t.stackTrace.firstOrNull()
+            // stackTrace 在某些 JVM 异常（1.4 及以下/部分厂商实现）可能为 null
+            val frames = t.stackTrace ?: emptyArray()
+            val frame = frames.firstOrNull { it.className.startsWith("com.omi4wos") }
+                ?: frames.firstOrNull()
             val where = frame?.let { "${it.fileName}:${it.lineNumber}" } ?: "-"
             return "${t.javaClass.simpleName}: ${t.message ?: ""} @$where"
         }
@@ -244,7 +271,8 @@ class LocationUploader(private val context: Context) {
          */
         private suspend fun freshLocation(context: Context, timeoutMs: Long): Location? =
             withTimeoutOrNull(timeoutMs) {
-                val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                val app = context.applicationContext
+                val lm = app.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
                     ?: return@withTimeoutOrNull null
                 val provider = listOf(
                     LocationManager.NETWORK_PROVIDER,
@@ -255,9 +283,9 @@ class LocationUploader(private val context: Context) {
                 } ?: return@withTimeoutOrNull null
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    currentLocationOnce(lm, provider, context)
+                    currentLocationOnce(lm, provider, app)
                 } else {
-                    legacySingleFix(lm, provider)
+                    legacySingleFix(lm, provider, timeoutMs)
                 }
             }
 
@@ -280,35 +308,48 @@ class LocationUploader(private val context: Context) {
             }
         }
 
-        /** API 28/29：传统回调式单次定位，取到首个结果后延迟注销监听。 */
-        private suspend fun legacySingleFix(lm: LocationManager, provider: String): Location? =
-            suspendCancellableCoroutine { cont ->
-                val mainHandler = Handler(Looper.getMainLooper())
-                val listener = object : LocationListener {
-                    override fun onLocationChanged(location: Location) {
-                        val self = this
-                        // 延迟到下一轮消息再注销，避免在 framework 回调栈里重入 removeUpdates
-                        runCatching { mainHandler.post { runCatching { lm.removeUpdates(self) } } }
-                        runCatching { if (cont.isActive) cont.resume(location) }
-                    }
+        /**
+         * API 28/29：传统回调式单次定位。
+         *
+         * ⚠️ 关键：必须在 [timeoutMs] 内向框架线程延迟注销监听，否则 GPS 永不回调时
+         * 监听器会永久驻留（耗电 + 每次手动上报叠加一个）。这里自行兜底，不依赖
+         * 外层 withTimeoutOrNull 的取消。
+         */
+        private suspend fun legacySingleFix(
+            lm: LocationManager,
+            provider: String,
+            timeoutMs: Long
+        ): Location? = suspendCancellableCoroutine { cont ->
+            val mainHandler = Handler(Looper.getMainLooper())
+            val finished = java.util.concurrent.atomic.AtomicBoolean(false)
 
-                    override fun onProviderEnabled(provider: String) {}
-                    override fun onProviderDisabled(provider: String) {}
-
-                    @Deprecated("Deprecated in API 29")
-                    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-                }
-                try {
-                    lm.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
-                } catch (t: Throwable) {
-                    Log.w(TAG, "requestLocationUpdates failed for $provider: ${t.message}")
-                    runCatching { if (cont.isActive) cont.resume(null) }
-                    return@suspendCancellableCoroutine
-                }
-                cont.invokeOnCancellation {
-                    runCatching { mainHandler.post { runCatching { lm.removeUpdates(listener) } } }
-                }
+            fun finish(location: Location?) {
+                if (!finished.compareAndSet(false, true)) return
+                runCatching { mainHandler.post { runCatching { lm.removeUpdates(listener) } } }
+                runCatching { if (cont.isActive) cont.resume(location) }
             }
+
+            val listener = object : LocationListener {
+                override fun onLocationChanged(location: Location) = finish(location)
+
+                override fun onProviderEnabled(provider: String) {}
+                override fun onProviderDisabled(provider: String) = finish(null)
+
+                @Deprecated("Deprecated in API 29")
+                override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+            }
+
+            try {
+                lm.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
+            } catch (t: Throwable) {
+                Log.w(TAG, "requestLocationUpdates failed for $provider: ${t.message}")
+                finish(null)
+                return@suspendCancellableCoroutine
+            }
+            // 兜底注销：超时后主动摘掉监听器
+            mainHandler.postDelayed({ finish(null) }, timeoutMs + 500L)
+            cont.invokeOnCancellation { finish(null) }
+        }
 
         /** 从系统缓存拿最新的可用位置：优先 GPS, 其次网络/被动。 */
         private fun lastKnownBest(context: Context, maxAgeMs: Long): Location? = runCatching {
@@ -339,6 +380,7 @@ class LocationUploader(private val context: Context) {
 
     /** 上一次成功采样并上传的位置时间戳, 避免同一条位置重复传。 */
     @Volatile private var lastSampledAt = 0L
+    @Volatile private var started = false
 
     private val tickRunnable = object : Runnable {
         override fun run() {
@@ -347,23 +389,35 @@ class LocationUploader(private val context: Context) {
         }
     }
 
+    /** 启动周期采样：幂等，重复调用不会叠加采样循环。 */
+    fun startOnce() {
+        if (started) return
+        started = true
+        start()
+    }
+
     /** 启动 15 分钟周期采样；无权限时只记录状态, 不崩溃。 */
     fun start() {
         handler.removeCallbacks(tickRunnable)
         handler.postDelayed(tickRunnable, GRACE_MS)
-        scope.launch { runCatching { refreshStatus(context) } }
+        scope.launch { runCatching { refreshStatus(context.applicationContext) } }
         Log.i(TAG, "Location uploader started (every ${INTERVAL_MS / 60000} min)")
+        AppLog.i(TAG, "定位上传器已启动（每 ${INTERVAL_MS / 60000} 分钟采样一次，首次 ${GRACE_MS / 1000}s 后）")
     }
 
     fun stop() {
         handler.removeCallbacks(tickRunnable)
         scope.cancel()
+        started = false
+        instance = null
         Log.i(TAG, "Location uploader stopped")
+        AppLog.i(TAG, "定位上传器已停止")
     }
 
     /** 周期采样：只读缓存，不主动唤醒 GPS。 */
     private fun sampleAndUpload() {
-        if (!hasLocationPermission(context)) {
+        val ctx = context.applicationContext
+        if (!hasLocationPermission(ctx)) {
             LocationStatus.update {
                 it.copy(
                     lastAttemptAt = System.currentTimeMillis(),
@@ -375,10 +429,10 @@ class LocationUploader(private val context: Context) {
         }
         scope.launch {
             try {
-                val location = lastKnownBest(context, CACHE_MAX_AGE_MS)
+                val location = lastKnownBest(ctx, CACHE_MAX_AGE_MS)
                 if (location == null) {
                     recordFailure(
-                        if (hasBackgroundLocationPermission(context)) {
+                        if (hasBackgroundLocationPermission(ctx)) {
                             "无可用位置（系统定位缓存为空或已过期）"
                         } else {
                             "无可用位置：后台定位权限未授予，请在设置中选择「始终允许」"
@@ -390,7 +444,7 @@ class LocationUploader(private val context: Context) {
                 if (location.time in (lastSampledAt - GRACE_MS)..(lastSampledAt + GRACE_MS)) return@launch
                 lastSampledAt = location.time
 
-                uploadSample(context, location)
+                uploadSample(ctx, location)
             } catch (t: Throwable) {
                 Log.e(TAG, "Location sample error", t)
                 recordFailure("采样异常: ${describe(t)}")

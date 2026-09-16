@@ -191,6 +191,15 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // [应用日志] 不连 adb 也能把运行日志导出发给开发者
+        LogCard(
+            logSize = uiState.logSize,
+            onExport = { viewModel.exportLog() },
+            onClear = { viewModel.clearLog() }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         // [未上传成功的提示] 有积压时显示醒目警示卡片
         val hasPending = uiState.uploadFailures > 0 || uiState.pendingBytes > 0L
         if (hasPending) {
@@ -471,6 +480,42 @@ private fun CrashCard(crash: String, onClear: () -> Unit) {
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
+        }
+    }
+}
+
+@Composable
+private fun LogCard(logSize: String, onExport: () -> Unit, onClear: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = stringResource(R.string.home_log_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.home_log_desc, logSize),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(onClick = onClear) {
+                    Text(stringResource(R.string.home_log_clear))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(onClick = onExport) {
+                    Text(stringResource(R.string.home_log_export))
+                }
+            }
         }
     }
 }

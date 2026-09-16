@@ -105,5 +105,13 @@
     <string name='home_location_upload_now'>Report now</string>
     <string name='home_crash_title'>Last crash log</string>
     <string name='home_crash_clear'>Clear</string>
-    <string name='home_crash_hint'>Reported by the app after a crash. Tap Clear once recorded.</string>
+    <string name='home_crash_hint'>Reported by the app after a crash. Send this text to the developer.</string>
+
+    <string name='home_log_title'>App log</string>
+    <string name='home_log_desc'>Continuously records key steps and errors (%1$s). If the app crashes, tap Export and send it to me.</string>
+    <string name='home_log_export'>Export log</string>
+    <string name='home_log_clear'>Clear</string>
+    <string name='home_log_empty'>No log yet</string>
+    <string name='home_log_copied'>Log copied to clipboard</string>
+    <string name='home_log_share_subject'>omi4wOS app log</string>
 </resources>

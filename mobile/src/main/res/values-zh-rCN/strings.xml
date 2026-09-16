@@ -106,4 +106,12 @@
     <string name='home_crash_title'>上次崩溃日志</string>
     <string name='home_crash_clear'>清除</string>
     <string name='home_crash_hint'>App 崩溃后自动记录，把这段发给开发者即可定位。</string>
+
+    <string name='home_log_title'>应用日志</string>
+    <string name='home_log_desc'>持续记录关键步骤与错误（当前 %1$s）。闪退时点「导出日志」发给我即可定位。</string>
+    <string name='home_log_export'>导出日志</string>
+    <string name='home_log_clear'>清空</string>
+    <string name='home_log_empty'>暂无日志</string>
+    <string name='home_log_copied'>日志已复制到剪贴板</string>
+    <string name='home_log_share_subject'>omi4wOS 应用日志</string>
 </resources>
