@@ -1,3 +1,6 @@
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -28,8 +31,8 @@ android {
         // CI 编译号：GitHub Actions run number（经 -PbuildNumber 传入），本地无参数时回退 "local"
         val buildNumber = providers.gradleProperty("buildNumber").orElse("local").get()
         // 编译时间：构建时刻本地时间，写死进 BuildConfig，About 页展示
-        val buildTime = java.time.LocalDateTime.now()
-            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+        val buildTime = LocalDateTime.now()
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
         buildConfigField("String", "BUILD_NUMBER", "\"${buildNumber}\"")
         buildConfigField("String", "BUILD_TIME", "\"${buildTime}\"")
     }
