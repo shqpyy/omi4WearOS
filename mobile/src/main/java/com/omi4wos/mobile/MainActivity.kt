@@ -28,10 +28,12 @@ import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
 
-    companion object { private const val TAG = "MainActivity" }
+    companion object {
+        private const val TAG = "MainActivity"
+        private const val LOCATION_PERMISSION_CODE = 4101
+    }
 
     /**
-     * 启动时应用保存的语言（兼容 API 28+，不依赖 AppCompat 的自动 recreate）。
      * SettingsViewModel.updateLanguage 调用 AppCompatDelegate.setApplicationLocales 后，
      * API 33+ 会自动 recreate；API < 33 下次启动时这里会应用新语言。
      */
@@ -63,10 +65,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             MobileApp()
         }
-    }
-
-    private companion object {
-        private const val LOCATION_PERMISSION_CODE = 4101
     }
 
     /**
