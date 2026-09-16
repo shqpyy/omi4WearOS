@@ -117,8 +117,12 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
-    // JSON
-    implementation("org.json:json:20240303")
+    // JSON：禁用 org.json:json —— Android 平台已自带 org.json（android.jar / core-libart.jar）。
+    // 【2026-09-16 真实崩溃根因】引入 Maven 版会造成「影子类」：
+    //   编译期解析到 Maven 版（有 put(String, float) 重载）
+    //   运行期系统优先加载平台版（无 float 重载）→ NoSuchMethodError: put(String, float)
+    // 表现为周期性定位上报静默杀进程（Error 逃过所有 catch(Exception)）。
+    // 不要在依赖里加回 org.json；float 一律显式 toDouble()。
 
     // Material3 theme (Theme.Material3.DayNight.NoActionBar referenced in AndroidManifest)
     implementation("com.google.android.material:material:1.12.0")

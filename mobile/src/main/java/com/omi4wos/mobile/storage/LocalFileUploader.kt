@@ -81,7 +81,7 @@ class LocalFileUploader(
                 put("audio_path", relPath)
                 put("audio_size_bytes", audioData.size)
                 put("battery_level", batteryLevel)
-                put("speech_confidence", confidence)
+                put("speech_confidence", confidence.toDouble())  // 平台 org.json 无 put(String,float)
                 put("source", source)
                 put("is_final", true)
                 put("exported_at", isoFmt.format(Date()))

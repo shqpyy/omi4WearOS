@@ -203,7 +203,7 @@ class HttpUploader(
             val json = JSONObject()
                 .put("lat", lat)
                 .put("lon", lon)
-                .put("accuracy_m", accuracyM)
+                .put("accuracy_m", accuracyM.toDouble())  // 必须是 double：平台 org.json 无 put(String,float)
                 .put("source", source)
                 .put("timestamp", sampledAtMs)
             val body = json.toString()
