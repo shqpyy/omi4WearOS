@@ -323,17 +323,20 @@ class LocationUploader(private val context: Context) {
             val mainHandler = Handler(Looper.getMainLooper())
             val finished = java.util.concurrent.atomic.AtomicBoolean(false)
 
-            fun finish(location: Location?) {
+            // listener 作为参数传入，避免局部函数前向引用（Kotlin 不允许）
+            fun finish(target: LocationListener?, location: Location?) {
                 if (!finished.compareAndSet(false, true)) return
-                runCatching { mainHandler.post { runCatching { lm.removeUpdates(listener) } } }
+                if (target != null) {
+                    runCatching { mainHandler.post { runCatching { lm.removeUpdates(target) } } }
+                }
                 runCatching { if (cont.isActive) cont.resume(location) }
             }
 
             val listener = object : LocationListener {
-                override fun onLocationChanged(location: Location) = finish(location)
+                override fun onLocationChanged(location: Location) = finish(this, location)
 
                 override fun onProviderEnabled(provider: String) {}
-                override fun onProviderDisabled(provider: String) = finish(null)
+                override fun onProviderDisabled(provider: String) = finish(this, null)
 
                 @Deprecated("Deprecated in API 29")
                 override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
@@ -343,12 +346,12 @@ class LocationUploader(private val context: Context) {
                 lm.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
             } catch (t: Throwable) {
                 Log.w(TAG, "requestLocationUpdates failed for $provider: ${t.message}")
-                finish(null)
+                finish(listener, null)
                 return@suspendCancellableCoroutine
             }
             // 兜底注销：超时后主动摘掉监听器
-            mainHandler.postDelayed({ finish(null) }, timeoutMs + 500L)
-            cont.invokeOnCancellation { finish(null) }
+            mainHandler.postDelayed({ finish(listener, null) }, timeoutMs + 500L)
+            cont.invokeOnCancellation { finish(listener, null) }
         }
 
         /** 从系统缓存拿最新的可用位置：优先 GPS, 其次网络/被动。 */
