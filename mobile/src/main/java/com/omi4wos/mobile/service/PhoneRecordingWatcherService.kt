@@ -111,26 +111,12 @@ class PhoneRecordingWatcherService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 startForeground(Constants.PHONE_WATCHER_NOTIFICATION_ID, buildNotification())
-                // 启动时立即发一次状态, 让 Home 页立刻看到, 不用等 scan 跑完
-                serviceScope.launch {
-                    runCatching { OmiConfig(this@PhoneRecordingWatcherService).getConfig() }.onSuccess { cfg ->
-                        val w = cfg.phoneWatcher
-                        WatcherStatus.update {
-                            it.copy(
-                                enabled = true,
-                                watchDir = if (w.treeUri.isNotBlank()) w.treeUri else w.watchDir,
-                                lastScanTime = it.lastScanTime
-                            )
-                        }
-                    }
-                }
                 startScanLoop()
             }
             ACTION_STOP -> {
                 scanJob?.cancel()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
-                WatcherStatus.update { it.copy(enabled = false) }
             }
         }
         return START_STICKY
