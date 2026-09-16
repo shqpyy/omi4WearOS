@@ -1,6 +1,8 @@
 package com.omi4wos.mobile
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
@@ -9,6 +11,7 @@ import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -56,8 +59,33 @@ class MainActivity : ComponentActivity() {
         )
         scheduleUploadRetry()
         requestBatteryOptimizationExemption()
+        maybeRequestLocationPermission()
         setContent {
             MobileApp()
+        }
+    }
+
+    private companion object {
+        private const val LOCATION_PERMISSION_CODE = 4101
+    }
+
+    /**
+     * 首次启动时请求定位权限（用于周期位置上传）。只请求一次；
+     * 若用户拒绝, LocationUploader 会自动跳过采样, 后续可在系统设置重新授权。
+     */
+    private fun maybeRequestLocationPermission() {
+        val prefs = getSharedPreferences("permissions", MODE_PRIVATE)
+        if (prefs.getBoolean("location_asked", false)) return
+        prefs.edit().putBoolean("location_asked", true).apply()
+
+        val needed = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+
+        if (needed.isNotEmpty()) {
+            Log.i(TAG, "Requesting location permission for periodic upload")
+            ActivityCompat.requestPermissions(this, needed.toTypedArray(), LOCATION_PERMISSION_CODE)
         }
     }
 

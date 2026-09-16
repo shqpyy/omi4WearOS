@@ -13,6 +13,10 @@
     <!-- Post notifications (Android 13+) — required for persistent foreground notification -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Location for optional GPS location upload (network-based, low power) -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
     <!-- Wake lock — keep service alive during upload -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 

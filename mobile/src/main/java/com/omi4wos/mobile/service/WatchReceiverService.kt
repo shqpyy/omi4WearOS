@@ -32,6 +32,7 @@ class WatchReceiverService : Service() {
     }
 
     private lateinit var messageClient: MessageClient
+    private var locationUploader: LocationUploader? = null
 
     /** 周期刷新通知时间戳, 让状态栏显示相对时间(刚刚/几分钟前), 而非停滞的绝对时刻 */
     private val handler = Handler(Looper.getMainLooper())
@@ -59,6 +60,10 @@ class WatchReceiverService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 定位采样: 只在服务进程中初始化一次 (START_STICKY 可能多次回调 onStartCommand)
+        if (locationUploader == null) {
+            locationUploader = LocationUploader(applicationContext).also { it.start() }
+        }
         // Android 14+ requires the service type to be passed to startForeground()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, createNotification(),
@@ -104,6 +109,8 @@ class WatchReceiverService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(refreshRunnable)
+        locationUploader?.stop()
+        locationUploader = null
         messageClient.removeListener(messageListener)
         Log.i(TAG, "Watch message listener unregistered")
         super.onDestroy()
