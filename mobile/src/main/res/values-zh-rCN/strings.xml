@@ -58,6 +58,10 @@
     <string name='about_title'>关于</string>
     <string name='about_version'>omi4wOS 伴侣 V1.11.0（多存储版）</string>
     <string name='about_adapted'>改编自 https://github.com/neurocis/omi4wos</string>
+    <string name='about_build_label'>编译号 #</string>
+    <string name='about_build_time_label'>编译时间</string>
+    <string name='about_changelog_title'>更新记录</string>
+    <string name='about_changelog_empty'>暂无记录</string>
     <string name='test_success'>连接成功</string>
     <string name='test_fail'>连接失败：%1$s</string>
     <string name='test_not_configured'>请先配置存储方式</string>
@@ -70,6 +74,9 @@
     <string name='home_upload_pending_keep'>本地音频在上传成功前会一直保留在手机里。</string>
     <string name='home_upload_retry'>立即重试</string>
     <string name='home_upload_all_done'>所有录音已上传</string>
+    <string name='home_storage_target_http'>已上传到你的 HTTP 服务器: %1$s (%2$s)</string>
+    <string name='home_storage_target_s3'>已上传到 S3 存储: %1$s (%2$s)</string>
+    <string name='home_storage_target_local'>已上传到本地存储: %1$s (%2$s)</string>
     <string name='language_restart_title'>需要重启</string>
     <string name='language_restart_message'>语言切换需重启后才能生效，现在重启？</string>
     <string name='language_restart_now'>立即重启</string>

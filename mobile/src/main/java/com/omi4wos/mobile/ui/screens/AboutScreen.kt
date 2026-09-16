@@ -15,9 +15,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.omi4wos.mobile.BuildConfig
+import com.omi4wos.mobile.R
+
+/** 更新记录：最新在前。label = 编译号，desc = 改动摘要。 */
+private val CHANGELOG = listOf(
+    "#59" to "通话录音选择目录：打开时直达上次所选文件夹，减少浏览延迟",
+    "#59" to "待上传卡片改用语义色，深色模式不再突兀",
+    "#57" to "上传完成日志按存储方式动态显示（HTTP/S3/本地）",
+    "#52" to "固定签名 keystore，手机/手表两端签名一致，连接稳定",
+    "#45" to "Watch Recording Control 状态持久化，命令可靠下发"
+)
 
 @Composable
 fun AboutScreen() {
@@ -60,6 +71,58 @@ fun AboutScreen() {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                 )
+                Text(
+                    text = stringResource(R.string.about_build_label) + BuildConfig.BUILD_NUMBER,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                )
+                Text(
+                    text = stringResource(R.string.about_build_time_label) + " · " + BuildConfig.BUILD_TIME,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Update history card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = stringResource(R.string.about_changelog_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                if (CHANGELOG.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.about_changelog_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                } else {
+                    CHANGELOG.forEachIndexed { index, (label, desc) ->
+                        Column(modifier = Modifier.padding(vertical = 3.dp)) {
+                            Text(
+                                text = "$label · $desc",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (index != CHANGELOG.lastIndex) {
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            )
+                        }
+                    }
+                }
             }
         }
 

@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omi4wos.mobile.data.SyncSummary
+import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.mobile.service.WatcherStatus
 import com.omi4wos.mobile.viewmodel.HomeViewModel
 import java.text.SimpleDateFormat
@@ -251,7 +252,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         } else {
             LazyColumn {
                 items(uiState.recentSyncs) { sync ->
-                    SyncCard(sync)
+                    SyncCard(sync, uiState.storageMethod)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
@@ -260,7 +261,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 }
 
 @Composable
-private fun SyncCard(sync: SyncSummary) {
+private fun SyncCard(sync: SyncSummary, storageMethod: OmiConfig.StorageMethod) {
     val dateFmt = SimpleDateFormat("MM/dd/yy hh:mma", Locale.getDefault())
     val timeFmt = SimpleDateFormat("hh:mma", Locale.getDefault())
 
@@ -294,7 +295,14 @@ private fun SyncCard(sync: SyncSummary) {
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Uploaded to Omi Cloud: $sizeStr  ($segStr)",
+                text = when (storageMethod) {
+                    OmiConfig.StorageMethod.HTTP ->
+                        stringResource(R.string.home_storage_target_http, sizeStr, segStr)
+                    OmiConfig.StorageMethod.S3 ->
+                        stringResource(R.string.home_storage_target_s3, sizeStr, segStr)
+                    OmiConfig.StorageMethod.LOCAL_FILE ->
+                        stringResource(R.string.home_storage_target_local, sizeStr, segStr)
+                },
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace
             )

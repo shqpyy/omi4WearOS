@@ -8,6 +8,7 @@ import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.Wearable
 import com.omi4wos.mobile.data.SyncSummary
 import com.omi4wos.mobile.data.UploadRepository
+import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.mobile.service.AudioReceiverService
 import com.omi4wos.mobile.service.AudioUploadService
 import com.omi4wos.mobile.service.runUploadRetry
@@ -29,7 +30,8 @@ data class HomeUiState(
     val totalUploads: Int = 0,
     val uploadFailures: Int = 0,
     val pendingBytes: Long = 0,
-    val recentSyncs: List<SyncSummary> = emptyList()
+    val recentSyncs: List<SyncSummary> = emptyList(),
+    val storageMethod: OmiConfig.StorageMethod = OmiConfig.StorageMethod.LOCAL_FILE
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -54,6 +56,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         observeState()
         queryWatchRecordingState()
         retryPendingUploads()
+        // 读取存储方式, 用于首页"已上传到…"的动态文案
+        viewModelScope.launch {
+            val method = OmiConfig(getApplication()).getConfig().storageMethod
+            _uiState.value = _uiState.value.copy(storageMethod = method)
+        }
     }
 
     override fun onCleared() {

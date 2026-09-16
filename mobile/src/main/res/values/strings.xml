@@ -58,6 +58,10 @@
     <string name='about_title'>About</string>
     <string name='about_version'>omi4wOS Companion V1.11.0 (multi-storage edition)</string>
     <string name='about_adapted'>Adapted from https://github.com/neurocis/omi4wos</string>
+    <string name='about_build_label'>Build #</string>
+    <string name='about_build_time_label'>Build time</string>
+    <string name='about_changelog_title'>Update history</string>
+    <string name='about_changelog_empty'>No records</string>
     <string name='test_success'>Connection OK</string>
     <string name='test_fail'>Connection failed: %1$s</string>
     <string name='test_not_configured'>Please configure storage first</string>
@@ -70,6 +74,9 @@
     <string name='home_upload_pending_keep'>Local audio is kept on the phone until a successful upload.</string>
     <string name='home_upload_retry'>Retry now</string>
     <string name='home_upload_all_done'>All recordings uploaded</string>
+    <string name='home_storage_target_http'>Uploaded to your HTTP server: %1$s (%2$s)</string>
+    <string name='home_storage_target_s3'>Uploaded to S3 storage: %1$s (%2$s)</string>
+    <string name='home_storage_target_local'>Uploaded to local storage: %1$s (%2$s)</string>
     <string name='language_restart_title'>Restart required</string>
     <string name='language_restart_message'>Language takes effect after restart. Restart now?</string>
     <string name='language_restart_now'>Restart now</string>

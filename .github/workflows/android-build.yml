@@ -35,7 +35,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build mobile APK
-        run: ./gradlew :mobile:assembleDebug
+        run: ./gradlew :mobile:assembleDebug -PbuildNumber=${{ github.run_number }}
 
       - name: Build wear APK
         run: ./gradlew :wear:assembleDebug

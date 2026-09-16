@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -189,7 +190,10 @@ fun SettingsScreen(
         PhoneWatcherCard(
             uiState = uiState,
             onEnabledChange = viewModel::updatePhoneWatcherEnabled,
-            onPickDir = { pickDirLauncher.launch(null) },
+            onPickDir = {
+                // 若已选过目录, 打开 picker 时直达该文件夹而非根目录, 减少全量枚举导致的延迟
+                pickDirLauncher.launch(initialTreeDocumentUri(uiState.phoneWatchTreeUri))
+            },
             onClearTreeUri = { viewModel.updatePhoneWatchTreeUri("") },
             onPatternsChange = viewModel::updatePhoneWatchPatterns,
             onIntervalChange = viewModel::updatePhoneWatchInterval
@@ -318,6 +322,21 @@ private fun treeUriToDisplay(uri: String, noneText: String): String {
         "/" + rel.trim('/')
     } catch (_: Exception) {
         uri
+    }
+}
+
+/**
+ * 从已保存的 tree URI 构造一个可直达该文件夹的 document URI，
+ * 作为 OpenDocumentTree 的初始位置。无法解析时返回 null（picker 回退到默认位置）。
+ */
+private fun initialTreeDocumentUri(treeUri: String): Uri? {
+    if (treeUri.isBlank()) return null
+    return try {
+        val uri = Uri.parse(treeUri)
+        val treeId = DocumentsContract.getTreeDocumentId(uri)
+        DocumentsContract.buildDocumentUriUsingTree(uri, treeId)
+    } catch (_: Exception) {
+        null
     }
 }
 
