@@ -184,6 +184,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
         LocationCard(viewModel = viewModel, uiState = uiState)
 
+        uiState.lastCrash?.let { crash ->
+            Spacer(modifier = Modifier.height(8.dp))
+            CrashCard(crash = crash, onClear = { viewModel.clearCrash() })
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
 
         // [未上传成功的提示] 有积压时显示醒目警示卡片
@@ -425,6 +430,47 @@ private fun LocationCard(viewModel: HomeViewModel, uiState: com.omi4wos.mobile.v
                     Text(stringResource(R.string.home_location_upload_now))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CrashCard(crash: String, onClear: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.home_crash_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Button(onClick = onClear) {
+                    Text(stringResource(R.string.home_crash_clear))
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.home_crash_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = crash,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
         }
     }
 }

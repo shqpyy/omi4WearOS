@@ -11,6 +11,7 @@ import com.omi4wos.mobile.data.UploadRepository
 import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.mobile.service.AudioReceiverService
 import com.omi4wos.mobile.service.AudioUploadService
+import com.omi4wos.mobile.service.CrashLogger
 import com.omi4wos.mobile.service.LocationStatus
 import com.omi4wos.mobile.service.LocationUploadStatus
 import com.omi4wos.mobile.service.LocationUploader
@@ -36,7 +37,8 @@ data class HomeUiState(
     val recentSyncs: List<SyncSummary> = emptyList(),
     val storageMethod: OmiConfig.StorageMethod = OmiConfig.StorageMethod.LOCAL_FILE,
     val location: LocationUploadStatus = LocationUploadStatus(),
-    val locationBusy: Boolean = false
+    val locationBusy: Boolean = false,
+    val lastCrash: String? = null
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -73,6 +75,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch { LocationUploader.refreshStatus(getApplication()) }
+        // 上次崩溃的堆栈(如果有), 直接摆在首页便于远程排错
+        _uiState.value = _uiState.value.copy(lastCrash = CrashLogger.last(getApplication()))
     }
 
     override fun onCleared() {
@@ -137,13 +141,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun uploadLocationNow() {
         if (_uiState.value.locationBusy) return
         _uiState.value = _uiState.value.copy(locationBusy = true)
+        val app = getApplication<Application>()
+        CrashLogger.markStep(app, "点击 立即上报")
         viewModelScope.launch {
             try {
-                LocationUploader.uploadNow(getApplication())
+                LocationUploader.uploadNow(app)
+                CrashLogger.markStep(app, "立即上报 完成")
+            } catch (t: Throwable) {
+                Log.e(TAG, "uploadLocationNow failed", t)
+                CrashLogger.markStep(app, "立即上报 异常: ${t.javaClass.simpleName}")
             } finally {
-                _uiState.value = _uiState.value.copy(locationBusy = false)
+                _uiState.value = _uiState.value.copy(
+                    locationBusy = false,
+                    lastCrash = CrashLogger.last(app)
+                )
             }
         }
+    }
+
+    /** 清除已展示的崩溃日志。 */
+    fun clearCrash() {
+        CrashLogger.clear(getApplication())
+        _uiState.value = _uiState.value.copy(lastCrash = null)
     }
 
     fun startWatchRecording() {

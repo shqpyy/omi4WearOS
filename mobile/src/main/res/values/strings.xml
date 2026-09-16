@@ -103,4 +103,7 @@
     <string name='home_location_never'>never</string>
     <string name='home_location_error'>Last error: %1$s</string>
     <string name='home_location_upload_now'>Report now</string>
+    <string name='home_crash_title'>Last crash log</string>
+    <string name='home_crash_clear'>Clear</string>
+    <string name='home_crash_hint'>Reported by the app after a crash. Tap Clear once recorded.</string>
 </resources>

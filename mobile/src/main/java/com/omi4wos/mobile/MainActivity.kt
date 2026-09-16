@@ -19,6 +19,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.omi4wos.mobile.omi.OmiConfig
+import com.omi4wos.mobile.service.CrashLogger
 import com.omi4wos.mobile.service.UploadRetryWorker
 import com.omi4wos.mobile.service.WatchReceiverService
 import com.omi4wos.mobile.ui.MobileApp
@@ -55,6 +56,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 最早时机安装崩溃记录器: 崩溃堆栈落盘, 下次打开在首页可见
+        CrashLogger.install(this)
         // Start the persistent foreground service that receives watch messages
         ContextCompat.startForegroundService(
             this, Intent(this, WatchReceiverService::class.java)

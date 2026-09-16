@@ -103,4 +103,7 @@
     <string name='home_location_never'>从未</string>
     <string name='home_location_error'>最近错误: %1$s</string>
     <string name='home_location_upload_now'>立即上报</string>
+    <string name='home_crash_title'>上次崩溃日志</string>
+    <string name='home_crash_clear'>清除</string>
+    <string name='home_crash_hint'>App 崩溃后自动记录，把这段发给开发者即可定位。</string>
 </resources>

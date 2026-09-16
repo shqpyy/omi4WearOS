@@ -8,9 +8,11 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.mobile.storage.HttpUploader
@@ -49,57 +51,61 @@ data class LocationUploadStatus(
 object LocationStatus {
     private val _flow = MutableStateFlow(LocationUploadStatus())
     val status: StateFlow<LocationUploadStatus> = _flow.asStateFlow()
-    fun update(t: (LocationUploadStatus) -> LocationUploadStatus) { _flow.value = t(_flow.value) }
+
+    fun update(t: (LocationUploadStatus) -> LocationUploadStatus) {
+        runCatching { _flow.value = t(_flow.value) }
+    }
 }
 
 /**
- * 周期定位上传器（网络定位为主，低功耗）。
+ * 周期定位上传器（以系统定位缓存为主，低功耗）。
  *
- * 挂在 [WatchReceiverService]（永久前台服务）下，每 [INTERVAL_MS] 采样一次：
- *   1. 优先读系统缓存 `getLastKnownLocation`，不主动唤醒 GPS 芯片 → 零额外耗电
- *   2. 手动上报时先请求一次单次定位，拿不到再回落到缓存
- *   3. 有权限 + 拿到可用位置 → POST 到服务器 /location
+ * 挂在 [WatchReceiverService]（永久前台服务）下，每 [INTERVAL_MS] 采样一次；
+ * Home 页的「立即上报」会额外允许一次主动定位。
  *
- * 所有分支都会写 [LocationStatus]，不再静默吞异常。
+ * 设计原则：**绝不因为定位失败而让 App 崩溃**。所有分支都会写 [LocationStatus]，
+ * 异常一律降级成界面可见的错误文案。
  */
 class LocationUploader(private val context: Context) {
 
     companion object {
         private const val TAG = "LocationUploader"
 
-        /** 采样间隔: 15 分钟。 */
+        /** 周期采样间隔: 15 分钟。 */
         const val INTERVAL_MS = 15 * 60 * 1000L
 
-        /** 精度阈值: 超过该值(米)的缓存位置认为太粗糙, 不上传。 */
+        /** 精度阈值: 超过该值(米)认为位置太粗糙, 不上传。 */
         private const val MAX_ACCURACY_M = 3000f
 
-        /** 缓存位置有效期: 超过此时长视为过期。 */
-        private const val MAX_LOCATION_AGE_MS = 60 * 60 * 1000L
+        /** 周期采样允许的缓存位置最大年龄。 */
+        private const val CACHE_MAX_AGE_MS = 60 * 60 * 1000L
 
-        private const val GRACE_MS = 30 * 1000L // 启动 30s 后再采样, 等系统 location 可用
+        /** 手动上报允许的缓存位置最大年龄（放宽, 便于验证链路）。 */
+        private const val MANUAL_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000L
 
-        /** 主动定位的超时（手动上报时用）。 */
-        private const val FRESH_FIX_TIMEOUT_MS = 15_000L
+        private const val GRACE_MS = 30 * 1000L
+
+        /** 主动定位超时。 */
+        private const val FRESH_FIX_TIMEOUT_MS = 12_000L
 
         /** 前台定位权限（FINE/COARSE 任一即可）。 */
-        fun hasLocationPermission(context: Context): Boolean {
+        fun hasLocationPermission(context: Context): Boolean = runCatching {
             val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
             val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
-            return (fine == PackageManager.PERMISSION_GRANTED) || (coarse == PackageManager.PERMISSION_GRANTED)
-        }
+            (fine == PackageManager.PERMISSION_GRANTED) || (coarse == PackageManager.PERMISSION_GRANTED)
+        }.getOrDefault(false)
 
         /**
-         * 后台定位权限。
-         *
-         * Android 10 及以下没有独立的后台定位权限（前台权限即可）；Android 11+ 必须显式授予
-         * ACCESS_BACKGROUND_LOCATION，否则 app 退到后台后读位置会抛 SecurityException。
+         * 后台定位权限。Android 10 及以下没有独立权限（前台权限即可）；
+         * Android 11+ 必须显式授予 ACCESS_BACKGROUND_LOCATION，否则退到后台读位置会抛
+         * SecurityException。
          */
-        fun hasBackgroundLocationPermission(context: Context): Boolean {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return hasLocationPermission(context)
-            return ContextCompat.checkSelfPermission(
+        fun hasBackgroundLocationPermission(context: Context): Boolean = runCatching {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) hasLocationPermission(context)
+            else ContextCompat.checkSelfPermission(
                 context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
-        }
+        }.getOrDefault(false)
 
         /** 刷新权限/配置相关状态（Home 页进入或手动上报前调用）。 */
         suspend fun refreshStatus(context: Context) {
@@ -117,60 +123,74 @@ class LocationUploader(private val context: Context) {
         }
 
         /**
-         * 立即采样并上报一次（Home 页「立即上报」按钮）。
-         * 与周期采样不同，这里会先主动请求一次单次定位，便于验证链路是否真的通。
+         * 立即采样并上报一次（Home 页「立即上报」）。任何异常都转成可见错误文案，不抛出。
          */
         suspend fun uploadNow(context: Context): Boolean {
-            refreshStatus(context)
             return try {
-                performSample(context, fresh = true)
-            } catch (e: Exception) {
-                Log.e(TAG, "Manual location upload failed", e)
-                recordFailure("手动上报异常: ${e.javaClass.simpleName}: ${e.message}")
+                refreshStatus(context)
+                performSample(context, maxAgeMs = MANUAL_CACHE_MAX_AGE_MS, allowFreshFix = true)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Manual location upload failed", t)
+                recordFailure("手动上报异常: ${describe(t)}")
                 false
             }
         }
 
         /** 一次完整的采样→上传流程，所有结果写入 [LocationStatus]。 */
-        private suspend fun performSample(context: Context, fresh: Boolean): Boolean {
+        private suspend fun performSample(
+            context: Context,
+            maxAgeMs: Long,
+            allowFreshFix: Boolean
+        ): Boolean {
             LocationStatus.update { it.copy(lastAttemptAt = System.currentTimeMillis()) }
 
             if (!hasLocationPermission(context)) {
                 recordFailure("未授予定位权限，请在系统设置中允许")
-                Log.d(TAG, "No location permission — skip sampling")
                 return false
             }
 
-            val location: Location? = (if (fresh) freshLocation(context, FRESH_FIX_TIMEOUT_MS) else null)
-                ?: lastKnownBest(context)
+            // 1) 先用系统缓存（与周期采样同一条路径，零风险）
+            lastKnownBest(context, maxAgeMs)?.let { return uploadSample(context, it) }
 
-            if (location == null) {
+            if (!allowFreshFix) {
+                recordFailure("无可用位置（系统定位缓存为空或已过期）")
+                return false
+            }
+
+            // 2) 缓存为空 → 尝试一次主动定位，全程兜底
+            val fresh = runCatching { freshLocation(context, FRESH_FIX_TIMEOUT_MS) }
+                .onFailure {
+                    Log.e(TAG, "freshLocation failed", it)
+                    recordFailure("主动定位异常: ${describe(it)}")
+                }
+                .getOrNull()
+
+            if (fresh == null) {
                 recordFailure(
                     if (hasBackgroundLocationPermission(context)) {
-                        "无可用位置（系统定位缓存为空），稍后重试"
+                        "无可用位置：系统缓存为空且主动定位未返回，请稍后重试"
                     } else {
                         "无可用位置：后台定位权限未授予，请在设置中选择「始终允许」"
                     }
                 )
-                Log.d(TAG, "No usable location — skip this interval")
                 return false
             }
+            return uploadSample(context, fresh)
+        }
 
-            val config = OmiConfig(context).getConfig()
-            val uploader = StorageUploader.create(context)
+        /** 把一条位置 POST 到 /location，并把结果写入状态。 */
+        private suspend fun uploadSample(context: Context, location: Location): Boolean {
+            val uploader = runCatching { StorageUploader.create(context) }.getOrNull()
             if (uploader !is HttpUploader) {
                 recordFailure("当前存储方式不是 HTTP，无法上报定位")
-                Log.d(TAG, "Storage method ${config.storageMethod} is not HTTP — location upload skipped")
                 return false
             }
-
             val source = when (location.provider?.lowercase()) {
                 "gps" -> "gps"
                 "network" -> "network"
                 "fused" -> "fused"
                 else -> location.provider ?: "unknown"
             }
-
             return try {
                 val ok = uploader.uploadLocation(
                     lat = location.latitude,
@@ -179,18 +199,13 @@ class LocationUploader(private val context: Context) {
                     source = source,
                     sampledAtMs = System.currentTimeMillis()
                 )
-                if (ok) {
-                    recordSuccess(location, source)
-                    Log.i(TAG, "Location sample ${location.latitude},${location.longitude} " +
-                            "acc=${location.accuracy}m uploaded=true")
-                } else {
-                    recordFailure("上报失败：服务器未接受（检查上传地址与 Key）")
-                    Log.w(TAG, "Location upload rejected by server")
-                }
+                if (ok) recordSuccess(location, source)
+                else recordFailure("上报失败：服务器未接受（检查上传地址与 Key）")
+                Log.i(TAG, "Location ${location.latitude},${location.longitude} acc=${location.accuracy}m ok=$ok")
                 ok
-            } catch (e: Exception) {
-                Log.e(TAG, "Location upload error", e)
-                recordFailure("上报异常: ${e.javaClass.simpleName}: ${e.message}")
+            } catch (t: Throwable) {
+                Log.e(TAG, "Location upload failed", t)
+                recordFailure("上报异常: ${describe(t)}")
                 false
             }
         }
@@ -210,14 +225,22 @@ class LocationUploader(private val context: Context) {
         }
 
         private fun recordFailure(message: String) {
-            LocationStatus.update {
-                it.copy(uploadFailed = it.uploadFailed + 1, lastError = message)
-            }
+            LocationStatus.update { it.copy(uploadFailed = it.uploadFailed + 1, lastError = message) }
+        }
+
+        /** 异常摘要：类名 + 消息 + 第一个业务栈帧（便于远程排错）。 */
+        private fun describe(t: Throwable): String {
+            val frame = t.stackTrace.firstOrNull { it.className.startsWith("com.omi4wos") }
+                ?: t.stackTrace.firstOrNull()
+            val where = frame?.let { "${it.fileName}:${it.lineNumber}" } ?: "-"
+            return "${t.javaClass.simpleName}: ${t.message ?: ""} @$where"
         }
 
         /**
-         * 主动请求一次单次定位（网络源优先，省电）。超时或失败返回 null，
-         * 由调用方回落到缓存位置。拿到首个回调后立刻注销监听。
+         * 主动请求一次单次定位（网络源优先，省电）。超时或失败返回 null。
+         *
+         * API 30+ 走 `getCurrentLocation`（无监听器回调，最稳）；API 28/29 才用
+         * 传统的 `requestLocationUpdates` + 延迟注销。所有分支均不抛异常。
          */
         private suspend fun freshLocation(context: Context, timeoutMs: Long): Location? =
             withTimeoutOrNull(timeoutMs) {
@@ -227,34 +250,68 @@ class LocationUploader(private val context: Context) {
                     LocationManager.NETWORK_PROVIDER,
                     LocationManager.GPS_PROVIDER,
                     LocationManager.PASSIVE_PROVIDER
-                ).firstOrNull {
-                    try { lm.isProviderEnabled(it) } catch (_: Exception) { false }
+                ).firstOrNull { p ->
+                    runCatching { lm.isProviderEnabled(p) }.getOrDefault(false)
                 } ?: return@withTimeoutOrNull null
 
-                suspendCancellableCoroutine { cont ->
-                    val listener = object : LocationListener {
-                        override fun onLocationChanged(location: Location) {
-                            tryRun { lm.removeUpdates(this) }
-                            if (cont.isActive) cont.resume(location)
-                        }
-                        override fun onProviderEnabled(provider: String) {}
-                        override fun onProviderDisabled(provider: String) {}
-                        @Deprecated("Deprecated in API 29")
-                        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-                    }
-                    try {
-                        lm.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
-                    } catch (e: Exception) {
-                        Log.w(TAG, "freshLocation request failed for $provider: ${e.message}")
-                        if (cont.isActive) cont.resume(null)
-                        return@suspendCancellableCoroutine
-                    }
-                    cont.invokeOnCancellation { tryRun { lm.removeUpdates(listener) } }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    currentLocationOnce(lm, provider, context)
+                } else {
+                    legacySingleFix(lm, provider)
                 }
             }
 
-        /** 从缓存拿最新的可用位置：优先 GPS, 其次网络/被动。 */
-        private fun lastKnownBest(context: Context): Location? {
+        /** API 30+：`getCurrentLocation` 单次定位，无监听器重入风险。 */
+        @RequiresApi(Build.VERSION_CODES.R)
+        private suspend fun currentLocationOnce(
+            lm: LocationManager,
+            provider: String,
+            context: Context
+        ): Location? = suspendCancellableCoroutine { cont ->
+            val signal = CancellationSignal()
+            cont.invokeOnCancellation { runCatching { signal.cancel() } }
+            try {
+                lm.getCurrentLocation(provider, signal, context.mainExecutor) { location ->
+                    runCatching { if (cont.isActive) cont.resume(location) }
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "getCurrentLocation failed for $provider: ${t.message}")
+                runCatching { if (cont.isActive) cont.resume(null) }
+            }
+        }
+
+        /** API 28/29：传统回调式单次定位，取到首个结果后延迟注销监听。 */
+        private suspend fun legacySingleFix(lm: LocationManager, provider: String): Location? =
+            suspendCancellableCoroutine { cont ->
+                val mainHandler = Handler(Looper.getMainLooper())
+                val listener = object : LocationListener {
+                    override fun onLocationChanged(location: Location) {
+                        val self = this
+                        // 延迟到下一轮消息再注销，避免在 framework 回调栈里重入 removeUpdates
+                        runCatching { mainHandler.post { runCatching { lm.removeUpdates(self) } } }
+                        runCatching { if (cont.isActive) cont.resume(location) }
+                    }
+
+                    override fun onProviderEnabled(provider: String) {}
+                    override fun onProviderDisabled(provider: String) {}
+
+                    @Deprecated("Deprecated in API 29")
+                    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+                }
+                try {
+                    lm.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
+                } catch (t: Throwable) {
+                    Log.w(TAG, "requestLocationUpdates failed for $provider: ${t.message}")
+                    runCatching { if (cont.isActive) cont.resume(null) }
+                    return@suspendCancellableCoroutine
+                }
+                cont.invokeOnCancellation {
+                    runCatching { mainHandler.post { runCatching { lm.removeUpdates(listener) } } }
+                }
+            }
+
+        /** 从系统缓存拿最新的可用位置：优先 GPS, 其次网络/被动。 */
+        private fun lastKnownBest(context: Context, maxAgeMs: Long): Location? = runCatching {
             val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
             val now = System.currentTimeMillis()
             val candidates = buildList {
@@ -262,19 +319,17 @@ class LocationUploader(private val context: Context) {
                 tryRun { lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let { add(it) } }
                 tryRun { lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)?.let { add(it) } }
             }
-            return candidates
-                .filter { it.time > 0 && (now - it.time) < MAX_LOCATION_AGE_MS }
-                .filter { it.accuracy <= MAX_ACCURACY_M || it.accuracy <= 0f } // 精度达标或未知
-                .maxByOrNull { it.time } // 取最新的
-        }
+            candidates
+                .filter { it.time > 0 && (now - it.time) < maxAgeMs }
+                .filter { it.accuracy <= MAX_ACCURACY_M || it.accuracy <= 0f }
+                .maxByOrNull { it.time }
+        }.onFailure { Log.d(TAG, "lastKnownBest failed: ${it.message}") }.getOrNull()
 
         private inline fun tryRun(block: () -> Unit) {
             try {
                 block()
-            } catch (e: SecurityException) {
-                Log.d(TAG, "Provider read denied: ${e.message}")
-            } catch (e: Exception) {
-                Log.d(TAG, "Provider read failed: ${e.message}")
+            } catch (t: Throwable) {
+                Log.d(TAG, "Provider read failed: ${t.message}")
             }
         }
     }
@@ -292,11 +347,11 @@ class LocationUploader(private val context: Context) {
         }
     }
 
-    /** 启动 15 分钟周期采样；无定位权限时只记录状态, 不崩溃。 */
+    /** 启动 15 分钟周期采样；无权限时只记录状态, 不崩溃。 */
     fun start() {
         handler.removeCallbacks(tickRunnable)
         handler.postDelayed(tickRunnable, GRACE_MS)
-        scope.launch { refreshStatus(context) }
+        scope.launch { runCatching { refreshStatus(context) } }
         Log.i(TAG, "Location uploader started (every ${INTERVAL_MS / 60000} min)")
     }
 
@@ -306,6 +361,7 @@ class LocationUploader(private val context: Context) {
         Log.i(TAG, "Location uploader stopped")
     }
 
+    /** 周期采样：只读缓存，不主动唤醒 GPS。 */
     private fun sampleAndUpload() {
         if (!hasLocationPermission(context)) {
             LocationStatus.update {
@@ -315,16 +371,15 @@ class LocationUploader(private val context: Context) {
                     lastError = "未授予定位权限，请在系统设置中允许"
                 )
             }
-            Log.d(TAG, "No location permission — skip sampling")
             return
         }
         scope.launch {
             try {
-                val location = lastKnownBest(context)
+                val location = lastKnownBest(context, CACHE_MAX_AGE_MS)
                 if (location == null) {
                     recordFailure(
                         if (hasBackgroundLocationPermission(context)) {
-                            "无可用位置（系统定位缓存为空）"
+                            "无可用位置（系统定位缓存为空或已过期）"
                         } else {
                             "无可用位置：后台定位权限未授予，请在设置中选择「始终允许」"
                         }
@@ -332,42 +387,13 @@ class LocationUploader(private val context: Context) {
                     return@launch
                 }
                 // 跳过与上一次相同时间戳的重复位置
-                if (location.time in (lastSampledAt - GRACE_MS)..(lastSampledAt + GRACE_MS)) {
-                    Log.d(TAG, "Same location as last sample — skip")
-                    return@launch
-                }
+                if (location.time in (lastSampledAt - GRACE_MS)..(lastSampledAt + GRACE_MS)) return@launch
                 lastSampledAt = location.time
 
-                val config = OmiConfig(context).getConfig()
-                val uploader = StorageUploader.create(context)
-                if (uploader is HttpUploader) {
-                    val source = when (location.provider?.lowercase()) {
-                        "gps" -> "gps"
-                        "network" -> "network"
-                        "fused" -> "fused"
-                        else -> location.provider ?: "unknown"
-                    }
-                    val ok = uploader.uploadLocation(
-                        lat = location.latitude,
-                        lon = location.longitude,
-                        accuracyM = location.accuracy,
-                        source = source,
-                        sampledAtMs = System.currentTimeMillis()
-                    )
-                    if (ok) {
-                        recordSuccess(location, source)
-                    } else {
-                        recordFailure("上报失败：服务器未接受（检查上传地址与 Key）")
-                    }
-                    Log.i(TAG, "Location sample ${location.latitude},${location.longitude} " +
-                            "acc=${location.accuracy}m uploaded=$ok")
-                } else {
-                    recordFailure("当前存储方式不是 HTTP，无法上报定位")
-                    Log.d(TAG, "Storage method ${config.storageMethod} is not HTTP — location upload skipped")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Location sample error", e)
-                recordFailure("采样异常: ${e.javaClass.simpleName}: ${e.message}")
+                uploadSample(context, location)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Location sample error", t)
+                recordFailure("采样异常: ${describe(t)}")
             }
         }
     }
