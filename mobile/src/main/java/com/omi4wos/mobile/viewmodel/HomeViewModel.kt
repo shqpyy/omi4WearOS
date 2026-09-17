@@ -39,8 +39,11 @@ data class HomeUiState(
     val storageMethod: OmiConfig.StorageMethod = OmiConfig.StorageMethod.LOCAL_FILE,
     val location: LocationUploadStatus = LocationUploadStatus(),
     val lastCrash: String? = null,
-    /** 日志文件占用（人类可读），展示在 About 页日志卡片。 */
-    val logSize: String = "-"
+    val logSize: String = "-",
+
+    /** 重试状态 */
+    val isRetrying: Boolean = false,
+    val retryResult: String? = null
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -169,7 +172,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun retryPendingUploads() {
         viewModelScope.launch {
-            runUploadRetry(getApplication())
+            _uiState.value = _uiState.value.copy(isRetrying = true, retryResult = null)
+            try {
+                val result = runUploadRetry(getApplication()) { msg ->
+                    _uiState.value = _uiState.value.copy(retryResult = msg)
+                }
+                _uiState.value = _uiState.value.copy(
+                    isRetrying = false,
+                    retryResult = result.message
+                )
+                // 成功后延迟清掉提示，让用户看到"Succeeded"
+                if (result.anySucceeded) {
+                    delay(2_000)
+                    _uiState.value = _uiState.value.copy(retryResult = null)
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isRetrying = false,
+                    retryResult = "Retry failed: ${e.message}"
+                )
+            }
         }
     }
 

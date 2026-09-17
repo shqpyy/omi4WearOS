@@ -233,15 +233,30 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = { viewModel.retryPendingUploads() },
+                        enabled = !uiState.isRetrying,
                         modifier = Modifier.align(Alignment.End)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Sync,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                        if (uiState.isRetrying) {
+                            Text("Retrying...")
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Sync,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(stringResource(R.string.home_upload_retry))
+                        }
+                    }
+
+                    uiState.retryResult?.let { result ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val isOk = result.startsWith("Succeeded") || result.startsWith("Partial")
+                        Text(
+                            text = result,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isOk) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onErrorContainer
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.home_upload_retry))
                     }
                 }
             }
