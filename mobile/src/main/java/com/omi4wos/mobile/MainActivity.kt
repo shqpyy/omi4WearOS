@@ -41,7 +41,10 @@ class MainActivity : ComponentActivity() {
      * API 33+ 会自动 recreate；API < 33 下次启动时这里会应用新语言。
      */
     override fun attachBaseContext(newBase: android.content.Context) {
-        val lang = OmiConfig.DEFAULT_LANGUAGE
+        val lang = try {
+            runBlocking { OmiConfig(newBase).getConfig().language }
+        } catch (_: Exception) { OmiConfig.DEFAULT_LANGUAGE }
+
         val wrapped = if (lang != "system") {
             val locale = Locale.forLanguageTag(lang)
             val config = Configuration(newBase.resources.configuration)
@@ -55,50 +58,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try {
-            AppLog.install(this)
-            CrashLogger.install(this)
-        } catch (e: Throwable) {
-            Log.e(TAG, "init log/crash logger failed", e)
-        }
-
-        try {
-            ContextCompat.startForegroundService(
-                this, Intent(this, WatchReceiverService::class.java)
-            )
-        } catch (e: Throwable) {
-            Log.e(TAG, "start WatchReceiverService failed", e)
-            AppLog.e(TAG, "启动 WatchReceiverService 失败", e)
-        }
-
-        try {
-            scheduleUploadRetry()
-        } catch (e: Throwable) {
-            Log.e(TAG, "scheduleUploadRetry failed", e)
-            AppLog.e(TAG, "排程上传重试 Worker 失败", e)
-        }
-
-        try {
-            requestBatteryOptimizationExemption()
-        } catch (e: Throwable) {
-            Log.e(TAG, "requestBatteryOptimizationExemption failed", e)
-            AppLog.e(TAG, "请求电池优化白名单失败", e)
-        }
-
-        try {
-            maybeRequestLocationPermission()
-        } catch (e: Throwable) {
-            Log.e(TAG, "maybeRequestLocationPermission failed", e)
-            AppLog.e(TAG, "请求定位权限失败", e)
-        }
-
-        try {
-            maybeRequestPhoneStatePermission()
-        } catch (e: Throwable) {
-            Log.e(TAG, "maybeRequestPhoneStatePermission failed", e)
-            AppLog.e(TAG, "请求电话状态权限失败", e)
-        }
-
+        // 最早时机安装日志 + 崩溃记录器: 崩溃堆栈落盘, 下次打开在首页可见/可导出
+        AppLog.install(this)
+        CrashLogger.install(this)
+        // Start the persistent foreground service that receives watch messages
+        ContextCompat.startForegroundService(
+            this, Intent(this, WatchReceiverService::class.java)
+        )
+        scheduleUploadRetry()
+        requestBatteryOptimizationExemption()
+        maybeRequestLocationPermission()
+        maybeRequestPhoneStatePermission()
         setContent {
             MobileApp()
         }

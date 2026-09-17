@@ -8,10 +8,18 @@ import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.Wearable
 import com.omi4wos.mobile.data.SyncSummary
 import com.omi4wos.mobile.data.UploadRepository
+import com.omi4wos.mobile.omi.OmiConfig
+import com.omi4wos.mobile.service.AppLog
 import com.omi4wos.mobile.service.AudioReceiverService
 import com.omi4wos.mobile.service.AudioUploadService
+import com.omi4wos.mobile.service.CrashLogger
+import com.omi4wos.mobile.service.LocationStatus
+import com.omi4wos.mobile.service.LocationUploadStatus
+import com.omi4wos.mobile.service.LocationUploader
 import com.omi4wos.mobile.service.runUploadRetry
+import com.omi4wos.mobile.storage.HttpUploader
 import com.omi4wos.shared.DataLayerPaths
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -26,9 +34,13 @@ data class HomeUiState(
     val watchBatteryLevel: Int = -1,
     val totalUploads: Int = 0,
     val uploadFailures: Int = 0,
+    val pendingBytes: Long = 0,
     val recentSyncs: List<SyncSummary> = emptyList(),
-    val isRetrying: Boolean = false,
-    val retryResult: String? = null
+    val storageMethod: OmiConfig.StorageMethod = OmiConfig.StorageMethod.LOCAL_FILE,
+    val location: LocationUploadStatus = LocationUploadStatus(),
+    val lastCrash: String? = null,
+    /** 日志文件占用（人类可读），展示在 About 页日志卡片。 */
+    val logSize: String = "-"
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -42,7 +54,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // Direct listener — catches messages when WearableListenerService is not triggered (Samsung)
     private val messageListener = MessageClient.OnMessageReceivedListener { event ->
         Log.d(TAG, "Direct message received: ${event.path} size=${event.data.size}")
-        AudioReceiverService.processMessage(getApplication(), event.path, event.data)
+        // 监听器回调里未捕获的异常会直接杀死进程（用户没点任何按钮也会闪退）
+        runCatching {
+            AudioReceiverService.processMessage(getApplication(), event.path, event.data)
+        }.onFailure {
+            Log.e(TAG, "processMessage failed", it)
+            AppLog.e(TAG, "处理手表消息失败(界面监听): ${event.path}", it)
+        }
     }
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -53,6 +71,48 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         observeState()
         queryWatchRecordingState()
         retryPendingUploads()
+        // 读取存储方式, 用于首页"已上传到…"的动态文案
+        viewModelScope.launch {
+            val method = OmiConfig(getApplication()).getConfig().storageMethod
+            _uiState.value = _uiState.value.copy(storageMethod = method)
+        }
+        // 定位上报状态 (权限/最近成败/坐标)
+        viewModelScope.launch {
+            LocationStatus.status.collect { status ->
+                _uiState.value = _uiState.value.copy(location = status)
+            }
+        }
+        viewModelScope.launch { LocationUploader.refreshStatus(getApplication()) }
+        // 上次崩溃的堆栈(如果有), 直接摆在首页便于远程排错
+        _uiState.value = _uiState.value.copy(lastCrash = CrashLogger.last(getApplication()))
+        refreshLogInfo()
+    }
+
+    /** 刷新日志体积，展示在首页「应用日志」卡片。 */
+    private fun refreshLogInfo() {
+        val app = getApplication<Application>()
+        _uiState.value = _uiState.value.copy(logSize = formatKb(AppLog.totalBytes(app)))
+    }
+
+    /** 导出日志（系统分享）。无日志时内部会提示，返回 false。 */
+    fun exportLog() {
+        val app = getApplication<Application>()
+        CrashLogger.markStep(app, "点击 导出日志")
+        AppLog.share(app)
+        refreshLogInfo()
+    }
+
+    /** 清空日志文件。 */
+    fun clearLog() {
+        val app = getApplication<Application>()
+        AppLog.clear(app)
+        refreshLogInfo()
+    }
+
+    private fun formatKb(bytes: Long): String = when {
+        bytes < 1024L -> "$bytes B"
+        bytes < 1048576L -> "${bytes / 1024} KB"
+        else -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1048576.0)
     }
 
     override fun onCleared() {
@@ -95,26 +155,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             )
         }.launchIn(viewModelScope)
 
+        // 周期性扫描待上传音频的占用空间 (轻量目录扫描, 5s 一次)
+        viewModelScope.launch {
+            while (true) {
+                val bytes = HttpUploader.getPendingBytes(getApplication())
+                if (_uiState.value.pendingBytes != bytes) {
+                    _uiState.value = _uiState.value.copy(pendingBytes = bytes)
+                }
+                delay(5_000)
+            }
+        }
     }
 
     fun retryPendingUploads() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isRetrying = true, retryResult = null)
-            try {
-                val succeeded = runUploadRetry(getApplication())
-                val pending = UploadRepository.getInstance(getApplication()).getPendingUploads().size
-                val msg = if (succeeded) "Retry finished" else "Nothing to retry"
-                _uiState.value = _uiState.value.copy(
-                    isRetrying = false,
-                    retryResult = "$msg · $pending remaining"
-                )
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isRetrying = false,
-                    retryResult = "Retry failed: ${e.message}"
-                )
-            }
+            runUploadRetry(getApplication())
         }
+    }
+
+    /** 清除已展示的崩溃日志。 */
+    fun clearCrash() {
+        CrashLogger.clear(getApplication())
+        _uiState.value = _uiState.value.copy(lastCrash = null)
     }
 
     fun startWatchRecording() {

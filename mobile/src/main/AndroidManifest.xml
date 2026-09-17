@@ -57,7 +57,8 @@
         <!-- Wearable Listener Service - receives audio from watch -->
         <service
             android:name=".service.AudioReceiverService"
-            android:exported="true">
+            android:exported="true"
+            android:permission="com.google.android.gms.permission.BIND_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
                 <data
