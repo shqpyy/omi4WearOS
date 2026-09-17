@@ -26,10 +26,15 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,12 +51,29 @@ import java.util.Locale
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.retryResult) {
+        uiState.retryResult?.let {
+            snackbarHostState.showSnackbar(it)
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        val retryResult = uiState.retryResult
+        if (retryResult != null) {
+            Text(
+                text = retryResult,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
         Image(
             painter = painterResource(R.drawable.omi4wearos_logo_title),
             contentDescription = "omi4wearOS",
@@ -60,7 +82,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Watch control card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -86,7 +107,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     )
                     if (uiState.isReceivingAudio) {
                         Text(
-                            text = "Receiving audio…",
+                            text = "Receiving audio...",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF4CAF50)
                         )
@@ -115,19 +136,19 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // [Retry icon] Upload Failures: N
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 onClick = { viewModel.retryPendingUploads() },
+                enabled = !uiState.isRetrying,
                 modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Sync,
                     contentDescription = "Retry failed uploads",
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = if (uiState.isRetrying) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
                 )
             }
             Text(
@@ -136,6 +157,13 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 color = if (uiState.uploadFailures > 0) Color(0xFFFFA000)
                         else MaterialTheme.colorScheme.onSurface
             )
+            if (uiState.isRetrying) {
+                Text(
+                    text = "Retrying...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -163,7 +191,7 @@ private fun SyncCard(sync: SyncSummary) {
     val timeFmt = SimpleDateFormat("hh:mma", Locale.getDefault())
 
     val allUploaded = sync.failedCount == 0
-    val statusText = if (allUploaded) "✓ Uploaded" else "⏳ ${sync.failedCount} failed"
+    val statusText = if (allUploaded) "Uploaded" else "${sync.failedCount} failed"
     val statusColor = if (allUploaded) Color(0xFF4CAF50) else Color(0xFFFFA000)
 
     val batteryStr = if (sync.batteryLevel >= 0) "${sync.batteryLevel}%" else "?%"
