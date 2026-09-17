@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -401,7 +402,7 @@ class LocationUploader(private val context: Context) {
 
     /** 启动周期采样；无权限时只记录状态, 不崩溃。间隔/开关从配置读取。 */
     fun start() {
-        val config = runCatching { OmiConfig(context).getConfig() }.getOrNull()
+        val config = runCatching { runBlocking { OmiConfig(context).getConfig() } }.getOrNull()
         if (config != null && !config.location.enabled) {
             Log.i(TAG, "Location uploader disabled by settings, skip start")
             return
@@ -415,14 +416,14 @@ class LocationUploader(private val context: Context) {
 
     /** 读取用户配置的采样间隔（分钟→毫秒），异常回退默认 15 分钟。 */
     private fun currentIntervalMs(): Long {
-        val min = runCatching { OmiConfig(context).getConfig() }.getOrNull()
+        val min = runCatching { runBlocking { OmiConfig(context).getConfig() } }.getOrNull()
             ?.location?.intervalMin?.coerceIn(1, 1440) ?: (INTERVAL_MS / 60_000L).toInt()
         return min * 60_000L
     }
 
     /** 设置变更（开关/间隔）后重排下一次采样。 */
     fun applySettings() {
-        val config = runCatching { OmiConfig(context).getConfig() }.getOrNull()
+        val config = runCatching { runBlocking { OmiConfig(context).getConfig() } }.getOrNull()
         if (config != null && !config.location.enabled) {
             stop()
             return
