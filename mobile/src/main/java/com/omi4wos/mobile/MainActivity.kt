@@ -41,10 +41,7 @@ class MainActivity : ComponentActivity() {
      * API 33+ 会自动 recreate；API < 33 下次启动时这里会应用新语言。
      */
     override fun attachBaseContext(newBase: android.content.Context) {
-        val lang = try {
-            runBlocking { OmiConfig(newBase).getConfig().language }
-        } catch (_: Exception) { OmiConfig.DEFAULT_LANGUAGE }
-
+        val lang = OmiConfig.DEFAULT_LANGUAGE
         val wrapped = if (lang != "system") {
             val locale = Locale.forLanguageTag(lang)
             val config = Configuration(newBase.resources.configuration)
