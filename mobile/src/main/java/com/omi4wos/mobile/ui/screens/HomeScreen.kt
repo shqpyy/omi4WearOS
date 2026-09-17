@@ -29,9 +29,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -53,7 +56,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     LaunchedEffect(uiState.retryResult) {
         uiState.retryResult?.let {
             snackbarHostState.showSnackbar(it)
-            viewModel.clearRetryResult()
         }
     }
 
@@ -79,7 +81,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Watch control card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -105,7 +106,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     )
                     if (uiState.isReceivingAudio) {
                         Text(
-                            text = "Receiving audio…",
+                            text = "Receiving audio...",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF4CAF50)
                         )
@@ -134,7 +135,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // [Retry icon] Upload Failures: N
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -158,7 +158,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             )
             if (uiState.isRetrying) {
                 Text(
-                    text = "Retrying…",
+                    text = "Retrying...",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -190,7 +190,7 @@ private fun SyncCard(sync: SyncSummary) {
     val timeFmt = SimpleDateFormat("hh:mma", Locale.getDefault())
 
     val allUploaded = sync.failedCount == 0
-    val statusText = if (allUploaded) "✓ Uploaded" else "⏳ ${sync.failedCount} failed"
+    val statusText = if (allUploaded) "Uploaded" else "${sync.failedCount} failed"
     val statusColor = if (allUploaded) Color(0xFF4CAF50) else Color(0xFFFFA000)
 
     val batteryStr = if (sync.batteryLevel >= 0) "${sync.batteryLevel}%" else "?%"
