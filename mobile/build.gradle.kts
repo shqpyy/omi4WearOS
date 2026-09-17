@@ -1,4 +1,5 @@
-import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 plugins {
@@ -30,8 +31,8 @@ android {
 
         // CI 编译号：GitHub Actions run number（经 -PbuildNumber 传入），本地无参数时回退 "local"
         val buildNumber = providers.gradleProperty("buildNumber").orElse("local").get()
-        // 编译时间：构建时刻本地时间，写死进 BuildConfig，About 页展示
-        val buildTime = LocalDateTime.now()
+        // 编译时间：构建时刻北京时间（Asia/Shanghai），写死进 BuildConfig，About 页展示
+        val buildTime = ZonedDateTime.now(ZoneId.of("Asia/Shanghai"))
             .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
         buildConfigField("String", "BUILD_NUMBER", "\"${buildNumber}\"")
         buildConfigField("String", "BUILD_TIME", "\"${buildTime}\"")

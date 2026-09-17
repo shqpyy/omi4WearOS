@@ -34,6 +34,17 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
+      - name: Generate changelog asset
+        run: |
+          export TZ=Asia/Shanghai
+          mkdir -p mobile/src/main/assets
+          {
+            echo "# omi4wOS 更新记录（自动生成 · 最新在前）"
+            echo ""
+            git log -60 --date=format:'%Y-%m-%d %H:%M' --pretty=format:'%h | %cd | %s' | head -60
+          } > mobile/src/main/assets/changelog.txt
+          echo "changelog.txt generated: $(wc -l < mobile/src/main/assets/changelog.txt) lines"
+
       - name: Build mobile APK
         run: ./gradlew :mobile:assembleDebug -PbuildNumber=${{ github.run_number }}
 

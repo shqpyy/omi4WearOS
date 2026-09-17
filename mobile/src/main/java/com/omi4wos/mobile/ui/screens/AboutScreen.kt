@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -33,21 +34,20 @@ import com.omi4wos.mobile.BuildConfig
 import com.omi4wos.mobile.R
 import com.omi4wos.mobile.service.AppLog
 
-/** 更新记录：最新在前。label = 编译号，desc = 改动摘要。 */
-private val CHANGELOG = listOf(
-    "#59" to "通话录音选择目录：打开时直达上次所选文件夹，减少浏览延迟",
-    "#59" to "待上传卡片改用语义色，深色模式不再突兀",
-    "#57" to "上传完成日志按存储方式动态显示（HTTP/S3/本地）",
-    "#52" to "固定签名 keystore，手机/手表两端签名一致，连接稳定",
-    "#45" to "Watch Recording Control 状态持久化，命令可靠下发"
-)
+/** 更新记录来自 CI 生成的 asset changelog.txt（git log 自动生成），最新在前。 */
 
 @Composable
 fun AboutScreen() {
     val context = LocalContext.current
     var logSize by remember { mutableStateOf("-") }
+    var changelog by remember { mutableStateOf(emptyList<String>()) }
     LaunchedEffect(Unit) {
         logSize = formatKb(AppLog.totalBytes(context))
+        // CI 编译时由 git log 生成 assets/changelog.txt；本地无该文件则显示空状态
+        changelog = runCatching {
+            context.assets.open("changelog.txt").bufferedReader().use { it.readText() }
+                .lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+        }.getOrDefault(emptyList())
     }
     Column(
         modifier = Modifier
@@ -118,25 +118,33 @@ fun AboutScreen() {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                if (CHANGELOG.isEmpty()) {
+                if (changelog.isEmpty()) {
                     Text(
                         text = stringResource(R.string.about_changelog_empty),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                 } else {
-                    CHANGELOG.forEachIndexed { index, (label, desc) ->
-                        Column(modifier = Modifier.padding(vertical = 3.dp)) {
-                            Text(
-                                text = "$label · $desc",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (index != CHANGELOG.lastIndex) {
-                            HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                            )
+                    // 内嵌垂直滚动区域（固定最大高度），方便浏览历史更新记录
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        changelog.forEachIndexed { index, line ->
+                            Column(modifier = Modifier.padding(vertical = 3.dp)) {
+                                Text(
+                                    text = line,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (index != changelog.lastIndex) {
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                )
+                            }
                         }
                     }
                 }
