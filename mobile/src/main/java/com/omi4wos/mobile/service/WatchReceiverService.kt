@@ -73,10 +73,15 @@ class WatchReceiverService : Service() {
         super.onCreate()
         AppLog.ensure(applicationContext)
         AppLog.i(TAG, "onCreate: 注册手表消息监听")
-        createNotificationChannel()
-        messageClient = Wearable.getMessageClient(this)
-        messageClient.addListener(messageListener)
-        Log.i(TAG, "Watch message listener registered")
+        try {
+            createNotificationChannel()
+            messageClient = Wearable.getMessageClient(this)
+            messageClient.addListener(messageListener)
+            Log.i(TAG, "Watch message listener registered")
+        } catch (t: Throwable) {
+            Log.e(TAG, "WatchReceiverService init failed", t)
+            AppLog.e(TAG, "WatchReceiverService 初始化失败", t)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
