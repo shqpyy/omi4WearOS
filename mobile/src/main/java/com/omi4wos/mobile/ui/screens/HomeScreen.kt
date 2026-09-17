@@ -149,7 +149,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     Text(
                         text = stringResource(
                             R.string.home_watcher_summary,
-                            watcherStatus.watchDir.ifBlank { "-" },
                             watcherStatus.scannedToday,
                             watcherStatus.uploadedOk,
                             watcherStatus.uploadFailed
@@ -188,15 +187,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             Spacer(modifier = Modifier.height(8.dp))
             CrashCard(crash = crash, onClear = { viewModel.clearCrash() })
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // [应用日志] 不连 adb 也能把运行日志导出发给开发者
-        LogCard(
-            logSize = uiState.logSize,
-            onExport = { viewModel.exportLog() },
-            onClear = { viewModel.clearLog() }
-        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -432,12 +422,6 @@ private fun LocationCard(viewModel: HomeViewModel, uiState: com.omi4wos.mobile.v
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Button(
-                    onClick = { viewModel.uploadLocationNow() },
-                    enabled = !uiState.locationBusy && loc.hasPermission
-                ) {
-                    Text(stringResource(R.string.home_location_upload_now))
-                }
             }
         }
     }
@@ -485,45 +469,9 @@ private fun CrashCard(crash: String, onClear: () -> Unit) {
 }
 
 @Composable
-private fun LogCard(logSize: String, onExport: () -> Unit, onClear: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = stringResource(R.string.home_log_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.home_log_desc, logSize),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Button(onClick = onClear) {
-                    Text(stringResource(R.string.home_log_clear))
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = onExport) {
-                    Text(stringResource(R.string.home_log_export))
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun SyncCard(sync: SyncSummary, storageMethod: OmiConfig.StorageMethod) {
-    val dateFmt = SimpleDateFormat("MM/dd/yy hh:mma", Locale.getDefault())
-    val timeFmt = SimpleDateFormat("hh:mma", Locale.getDefault())
+    val dateFmt = SimpleDateFormat("MM/dd/yy HH:mm", Locale.getDefault())
+    val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
     val allUploaded = sync.failedCount == 0
     val statusText = if (allUploaded) "✓ Uploaded" else "⏳ ${sync.failedCount} failed"

@@ -38,9 +38,8 @@ data class HomeUiState(
     val recentSyncs: List<SyncSummary> = emptyList(),
     val storageMethod: OmiConfig.StorageMethod = OmiConfig.StorageMethod.LOCAL_FILE,
     val location: LocationUploadStatus = LocationUploadStatus(),
-    val locationBusy: Boolean = false,
     val lastCrash: String? = null,
-    /** 日志文件占用（人类可读），展示在首页日志卡片。 */
+    /** 日志文件占用（人类可读），展示在 About 页日志卡片。 */
     val logSize: String = "-"
 )
 
@@ -171,28 +170,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun retryPendingUploads() {
         viewModelScope.launch {
             runUploadRetry(getApplication())
-        }
-    }
-
-    /** 手动立即上报一次定位（Home 页按钮），并刷新权限状态。 */
-    fun uploadLocationNow() {
-        if (_uiState.value.locationBusy) return
-        _uiState.value = _uiState.value.copy(locationBusy = true)
-        val app = getApplication<Application>()
-        CrashLogger.markStep(app, "点击 立即上报")
-        viewModelScope.launch {
-            try {
-                LocationUploader.uploadNow(app)
-                CrashLogger.markStep(app, "立即上报 完成")
-            } catch (t: Throwable) {
-                Log.e(TAG, "uploadLocationNow failed", t)
-                CrashLogger.markStep(app, "立即上报 异常: ${t.javaClass.simpleName}")
-            } finally {
-                _uiState.value = _uiState.value.copy(
-                    locationBusy = false,
-                    lastCrash = CrashLogger.last(app)
-                )
-            }
         }
     }
 

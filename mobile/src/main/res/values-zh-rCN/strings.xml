@@ -87,7 +87,7 @@
     <string name='settings_save_hint'>保存全部存储与监听设置（不仅是 HTTP）</string>
     <string name='home_watcher_title'>通话录音监听</string>
     <string name='home_watcher_off'>监听已关闭 - 请在设置中开启</string>
-    <string name='home_watcher_summary'>目录: %1$s · 当日文件: %2$d · 已上传: %3$d · 失败: %4$d</string>
+    <string name='home_watcher_summary'>当日文件: %1$d · 已上传: %2$d · 失败: %3$d</string>
     <string name='home_watcher_last'>最近扫描: %1$s</string>
     <string name='home_watcher_error'>最近错误: %1$s</string>
 
@@ -102,13 +102,16 @@
     <string name='home_location_last_ok'>最近成功: %1$s</string>
     <string name='home_location_never'>从未</string>
     <string name='home_location_error'>最近错误: %1$s</string>
-    <string name='home_location_upload_now'>立即上报</string>
+
+    <string name='location_title'>位置上报</string>
+    <string name='location_desc'>周期性把手机的大致位置上报到你自己的服务器（低耗电）。</string>
+    <string name='location_interval'>上报间隔（分钟）</string>
     <string name='home_crash_title'>上次崩溃日志</string>
     <string name='home_crash_clear'>清除</string>
     <string name='home_crash_hint'>App 崩溃后自动记录，把这段发给开发者即可定位。</string>
 
     <string name='home_log_title'>应用日志</string>
-    <string name='home_log_desc'>持续记录关键步骤与错误（当前 %1$s）。闪退时点「导出日志」发给我即可定位。</string>
+    <string name='home_log_desc'>供排查手机与手表端 App 问题时使用（当前 %1$s）。点「导出日志」即可分享。</string>
     <string name='home_log_export'>导出日志</string>
     <string name='home_log_clear'>清空</string>
     <string name='home_log_empty'>暂无日志</string>

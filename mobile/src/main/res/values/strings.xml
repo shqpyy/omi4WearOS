@@ -87,7 +87,7 @@
     <string name='settings_save_hint'>Save applies all storage &amp; watcher settings, not just HTTP.</string>
     <string name='home_watcher_title'>Call recording watcher</string>
     <string name='home_watcher_off'>Watcher is OFF - enable it in Settings</string>
-    <string name='home_watcher_summary'>Dir: %1$s · Today files: %2$d · Uploaded: %3$d · Failed: %4$d</string>
+    <string name='home_watcher_summary'>Today: %1$d files · Uploaded: %2$d · Failed: %3$d</string>
     <string name='home_watcher_last'>Last scan: %1$s</string>
     <string name='home_watcher_error'>Last error: %1$s</string>
 
@@ -102,13 +102,16 @@
     <string name='home_location_last_ok'>Last success: %1$s</string>
     <string name='home_location_never'>never</string>
     <string name='home_location_error'>Last error: %1$s</string>
-    <string name='home_location_upload_now'>Report now</string>
+
+    <string name='location_title'>Location upload</string>
+    <string name='location_desc'>Periodically reports the phone\'s approximate position to your server (low battery impact).</string>
+    <string name='location_interval'>Report interval (minutes)</string>
     <string name='home_crash_title'>Last crash log</string>
     <string name='home_crash_clear'>Clear</string>
     <string name='home_crash_hint'>Reported by the app after a crash. Send this text to the developer.</string>
 
     <string name='home_log_title'>App log</string>
-    <string name='home_log_desc'>Continuously records key steps and errors (%1$s). If the app crashes, tap Export and send it to me.</string>
+    <string name='home_log_desc'>Used for troubleshooting issues with the phone and watch apps (%1$s). Tap Export to share a log.</string>
     <string name='home_log_export'>Export log</string>
     <string name='home_log_clear'>Clear</string>
     <string name='home_log_empty'>No log yet</string>

@@ -6,6 +6,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.omi4wos.mobile.omi.OmiConfig
+import com.omi4wos.mobile.service.LocationUploader
 import com.omi4wos.mobile.service.PhoneRecordingWatcherService
 import com.omi4wos.mobile.service.RecordingWatcherWorker
 import com.omi4wos.mobile.storage.StorageUploader
@@ -46,6 +47,10 @@ data class SettingsUiState(
     val phoneWatchPatterns: String = OmiConfig.DEFAULT_FILE_PATTERNS,
     val phoneWatchInterval: Int = 60,
 
+    // 定位上报
+    val locationEnabled: Boolean = true,
+    val locationIntervalMin: Int = 15,
+
     // 语言（system / en / zh-CN）
     val language: String = OmiConfig.DEFAULT_LANGUAGE,
 
@@ -85,6 +90,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 phoneWatchTreeUri = config.phoneWatcher.treeUri,
                 phoneWatchPatterns = config.phoneWatcher.filePatterns,
                 phoneWatchInterval = config.phoneWatcher.scanIntervalSec,
+                locationEnabled = config.location.enabled,
+                locationIntervalMin = config.location.intervalMin,
                 language = config.language
             )
         }
@@ -176,6 +183,35 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _uiState.value = _uiState.value.copy(phoneWatchInterval = value)
     }
 
+    // ---- 定位上报 ----
+    // 开关即时生效: 拨动即保存并启停定位采样, 不依赖全局 Save。
+    fun updateLocationEnabled(value: Boolean) {
+        _uiState.value = _uiState.value.copy(locationEnabled = value)
+        viewModelScope.launch {
+            val current = omiConfig.getConfig()
+            omiConfig.saveConfig(
+                current.copy(location = current.location.copy(enabled = value))
+            )
+            val ctx = getApplication<Application>()
+            if (value) {
+                LocationUploader.get(ctx).applySettings()
+            } else {
+                LocationUploader.get(ctx).stop()
+            }
+        }
+    }
+    fun updateLocationInterval(value: Int) {
+        _uiState.value = _uiState.value.copy(locationIntervalMin = value)
+        viewModelScope.launch {
+            val current = omiConfig.getConfig()
+            val min = value.coerceIn(1, 1440)
+            omiConfig.saveConfig(
+                current.copy(location = current.location.copy(intervalMin = min))
+            )
+            LocationUploader.get(getApplication<Application>()).applySettings()
+        }
+    }
+
     // ---- 保存 ----
     fun saveSettings() {
         viewModelScope.launch {
@@ -203,6 +239,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                             treeUri = state.phoneWatchTreeUri.trim(),
                             filePatterns = state.phoneWatchPatterns.trim(),
                             scanIntervalSec = state.phoneWatchInterval.coerceIn(15, 3600)
+                        ),
+                        location = OmiConfig.LocationConfig(
+                            enabled = state.locationEnabled,
+                            intervalMin = state.locationIntervalMin.coerceIn(1, 1440)
                         ),
                         language = state.language
                     )
@@ -254,6 +294,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                             treeUri = state.phoneWatchTreeUri.trim(),
                             filePatterns = state.phoneWatchPatterns.trim(),
                             scanIntervalSec = state.phoneWatchInterval.coerceIn(15, 3600)
+                        ),
+                        location = OmiConfig.LocationConfig(
+                            enabled = state.locationEnabled,
+                            intervalMin = state.locationIntervalMin.coerceIn(1, 1440)
                         ),
                         language = state.language
                     )

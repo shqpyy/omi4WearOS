@@ -388,7 +388,7 @@ class LocationUploader(private val context: Context) {
     private val tickRunnable = object : Runnable {
         override fun run() {
             sampleAndUpload()
-            handler.postDelayed(this, INTERVAL_MS)
+            handler.postDelayed(this, currentIntervalMs())
         }
     }
 
@@ -399,13 +399,41 @@ class LocationUploader(private val context: Context) {
         start()
     }
 
-    /** 启动 15 分钟周期采样；无权限时只记录状态, 不崩溃。 */
+    /** 启动周期采样；无权限时只记录状态, 不崩溃。间隔/开关从配置读取。 */
     fun start() {
+        val config = runCatching { OmiConfig(context).getConfig() }.getOrNull()
+        if (config != null && !config.location.enabled) {
+            Log.i(TAG, "Location uploader disabled by settings, skip start")
+            return
+        }
         handler.removeCallbacks(tickRunnable)
         handler.postDelayed(tickRunnable, GRACE_MS)
         scope.launch { runCatching { refreshStatus(context.applicationContext) } }
-        Log.i(TAG, "Location uploader started (every ${INTERVAL_MS / 60000} min)")
-        AppLog.i(TAG, "定位上传器已启动（每 ${INTERVAL_MS / 60000} 分钟采样一次，首次 ${GRACE_MS / 1000}s 后）")
+        Log.i(TAG, "Location uploader started (every ${currentIntervalMs() / 60000} min)")
+        AppLog.i(TAG, "定位上传器已启动（每 ${currentIntervalMs() / 60000} 分钟采样一次，首次 ${GRACE_MS / 1000}s 后）")
+    }
+
+    /** 读取用户配置的采样间隔（分钟→毫秒），异常回退默认 15 分钟。 */
+    private fun currentIntervalMs(): Long {
+        val min = runCatching { OmiConfig(context).getConfig() }.getOrNull()
+            ?.location?.intervalMin?.coerceIn(1, 1440) ?: (INTERVAL_MS / 60_000L).toInt()
+        return min * 60_000L
+    }
+
+    /** 设置变更（开关/间隔）后重排下一次采样。 */
+    fun applySettings() {
+        val config = runCatching { OmiConfig(context).getConfig() }.getOrNull()
+        if (config != null && !config.location.enabled) {
+            stop()
+            return
+        }
+        if (!started) { started = true }
+        handler.removeCallbacks(tickRunnable)
+        handler.postDelayed(tickRunnable, GRACE_MS)
+        scope.launch { runCatching { refreshStatus(context.applicationContext) } }
+        val m = currentIntervalMs() / 60_000L
+        Log.i(TAG, "Location uploader settings applied (every $m min)")
+        AppLog.i(TAG, "定位上报设置已生效（每 $m 分钟）")
     }
 
     fun stop() {

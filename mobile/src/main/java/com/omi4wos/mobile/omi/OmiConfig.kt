@@ -66,6 +66,12 @@ class OmiConfig(private val context: Context) {
         val scanIntervalSec: Int = 60                    // 扫描间隔（秒）
     )
 
+    /** 定位上报配置 */
+    data class LocationConfig(
+        val enabled: Boolean = true,    // 开关, 默认开（保持现状: 一直周期上报）
+        val intervalMin: Int = 15       // 采样间隔（分钟）
+    )
+
     /** 顶层配置聚合 */
     data class Config(
         val storageMethod: StorageMethod = StorageMethod.LOCAL_FILE,
@@ -73,6 +79,7 @@ class OmiConfig(private val context: Context) {
         val http: HttpConfig = HttpConfig(),
         val s3: S3Config = S3Config(),
         val phoneWatcher: PhoneWatcherConfig = PhoneWatcherConfig(),
+        val location: LocationConfig = LocationConfig(),
         val language: String = DEFAULT_LANGUAGE
     )
 
@@ -107,6 +114,10 @@ class OmiConfig(private val context: Context) {
         private val KEY_PW_PATTERNS = stringPreferencesKey("pw_patterns")
         private val KEY_PW_INTERVAL = intPreferencesKey("pw_interval")
 
+        // Location
+        private val KEY_LOC_ENABLED = booleanPreferencesKey("loc_enabled")
+        private val KEY_LOC_INTERVAL = intPreferencesKey("loc_interval")
+
         // Language
         private val KEY_LANGUAGE = stringPreferencesKey("language")
     }
@@ -138,6 +149,10 @@ class OmiConfig(private val context: Context) {
                     filePatterns = prefs[KEY_PW_PATTERNS] ?: DEFAULT_FILE_PATTERNS,
                     scanIntervalSec = prefs[KEY_PW_INTERVAL] ?: 60
                 ),
+                location = LocationConfig(
+                    enabled = prefs[KEY_LOC_ENABLED] ?: true,
+                    intervalMin = prefs[KEY_LOC_INTERVAL] ?: 15
+                ),
                 language = prefs[KEY_LANGUAGE] ?: DEFAULT_LANGUAGE
             )
         }.first()
@@ -159,6 +174,8 @@ class OmiConfig(private val context: Context) {
             prefs[KEY_PW_TREE_URI] = config.phoneWatcher.treeUri
             prefs[KEY_PW_PATTERNS] = config.phoneWatcher.filePatterns
             prefs[KEY_PW_INTERVAL] = config.phoneWatcher.scanIntervalSec
+            prefs[KEY_LOC_ENABLED] = config.location.enabled
+            prefs[KEY_LOC_INTERVAL] = config.location.intervalMin
             prefs[KEY_LANGUAGE] = config.language
         }
     }
@@ -188,6 +205,10 @@ class OmiConfig(private val context: Context) {
                 treeUri = prefs[KEY_PW_TREE_URI] ?: "",
                 filePatterns = prefs[KEY_PW_PATTERNS] ?: DEFAULT_FILE_PATTERNS,
                 scanIntervalSec = prefs[KEY_PW_INTERVAL] ?: 60
+            ),
+            location = LocationConfig(
+                enabled = prefs[KEY_LOC_ENABLED] ?: true,
+                intervalMin = prefs[KEY_LOC_INTERVAL] ?: 15
             ),
             language = prefs[KEY_LANGUAGE] ?: DEFAULT_LANGUAGE
         )

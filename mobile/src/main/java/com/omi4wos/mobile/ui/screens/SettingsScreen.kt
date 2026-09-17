@@ -201,7 +201,16 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // === 5. 保活引导 ===
+        // === 5. 定位上报 ===
+        LocationSettingsCard(
+            uiState = uiState,
+            onEnabledChange = viewModel::updateLocationEnabled,
+            onIntervalChange = viewModel::updateLocationInterval
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // === 6. 保活引导 ===
         KeepAliveCard(
             context = context,
             snackbarHostState = snackbarHostState
@@ -209,12 +218,12 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // === 6. About ===
+        // === 7. About ===
         AboutCard()
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // === 7. 语言切换（紧凑，底部） ===
+        // === 8. 语言切换（紧凑，底部） ===
         LanguageCard(
             uiState = uiState,
             onLanguageSelected = viewModel::updateLanguage
@@ -626,6 +635,58 @@ private fun PhoneWatcherCard(
                         v.toIntOrNull()?.let { onIntervalChange(it) }
                     },
                     label = { Text(context.getString(R.string.phone_watcher_interval)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocationSettingsCard(
+    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
+    onEnabledChange: (Boolean) -> Unit,
+    onIntervalChange: (Int) -> Unit
+) {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = context.getString(R.string.location_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = uiState.locationEnabled,
+                    onCheckedChange = onEnabledChange
+                )
+            }
+            if (uiState.locationEnabled) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = context.getString(R.string.location_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = uiState.locationIntervalMin.toString(),
+                    onValueChange = { v ->
+                        v.toIntOrNull()?.let { onIntervalChange(it) }
+                    },
+                    label = { Text(context.getString(R.string.location_interval)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
