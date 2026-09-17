@@ -13,10 +13,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.omi4wos.mobile.R
 import com.omi4wos.mobile.ui.screens.AboutScreen
 import com.omi4wos.mobile.ui.screens.HomeScreen
 import com.omi4wos.mobile.ui.screens.SettingsScreen
@@ -33,8 +35,8 @@ fun MobileApp() {
             bottomBar = {
                 NavigationBar {
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                        label = { Text("Home") },
+                        icon = { Icon(Icons.Default.Home, contentDescription = stringResource(R.string.tab_home)) },
+                        label = { Text(stringResource(R.string.tab_home)) },
                         selected = currentRoute == "home",
                         onClick = {
                             if (currentRoute != "home") {
@@ -45,8 +47,8 @@ fun MobileApp() {
                         }
                     )
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                        label = { Text("Settings") },
+                        icon = { Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.tab_settings)) },
+                        label = { Text(stringResource(R.string.tab_settings)) },
                         selected = currentRoute == "settings",
                         onClick = {
                             if (currentRoute != "settings") {
@@ -57,8 +59,8 @@ fun MobileApp() {
                         }
                     )
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.Info, contentDescription = "About") },
-                        label = { Text("About") },
+                        icon = { Icon(Icons.Default.Info, contentDescription = stringResource(R.string.tab_about)) },
+                        label = { Text(stringResource(R.string.tab_about)) },
                         selected = currentRoute == "about",
                         onClick = {
                             if (currentRoute != "about") {

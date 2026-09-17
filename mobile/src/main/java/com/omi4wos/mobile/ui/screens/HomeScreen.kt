@@ -64,10 +64,9 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        val retryResult = uiState.retryResult
-        if (retryResult != null) {
+        if (uiState.retryResult != null) {
             Text(
-                text = retryResult,
+                text = uiState.retryResult,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp)

@@ -52,19 +52,14 @@ object Constants {
     // Data Layer chunk size
     const val MAX_DATA_LAYER_PAYLOAD = 100_000 // ~100KB per message
 
-    // Omi API
-    const val OMI_BASE_URL = "https://api.omi.me"
-    const val OMI_CONVERSATIONS_PATH = "/v2/integrations/%s/user/conversations?uid=%s"
-
     // Notification
     const val WEAR_NOTIFICATION_CHANNEL_ID = "omi4wos_audio_capture"
     const val WEAR_NOTIFICATION_ID = 1001
     const val MOBILE_NOTIFICATION_CHANNEL_ID = "omi4wos_receiver"
     const val MOBILE_NOTIFICATION_ID = 1002
+    const val PHONE_WATCHER_NOTIFICATION_CHANNEL_ID = "omi4wos_phone_watcher"
+    const val PHONE_WATCHER_NOTIFICATION_ID = 1003
 
     // Preferences keys
     const val PREF_RECORDING_ENABLED = "recording_enabled"
-    const val PREF_OMI_API_KEY = "omi_api_key"
-    const val PREF_OMI_APP_ID = "omi_app_id"
-    const val PREF_OMI_USER_ID = "omi_user_id"
 }

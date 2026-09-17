@@ -26,7 +26,9 @@ data class HomeUiState(
     val watchBatteryLevel: Int = -1,
     val totalUploads: Int = 0,
     val uploadFailures: Int = 0,
-    val recentSyncs: List<SyncSummary> = emptyList()
+    val recentSyncs: List<SyncSummary> = emptyList(),
+    val isRetrying: Boolean = false,
+    val retryResult: String? = null
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -97,7 +99,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun retryPendingUploads() {
         viewModelScope.launch {
-            runUploadRetry(getApplication())
+            _uiState.value = _uiState.value.copy(isRetrying = true, retryResult = null)
+            try {
+                val succeeded = runUploadRetry(getApplication())
+                val pending = UploadRepository.getInstance(getApplication()).getPendingUploads().size
+                val msg = if (succeeded) "Retry finished" else "Nothing to retry"
+                _uiState.value = _uiState.value.copy(
+                    isRetrying = false,
+                    retryResult = "$msg · $pending remaining"
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isRetrying = false,
+                    retryResult = "Retry failed: ${e.message}"
+                )
+            }
         }
     }
 

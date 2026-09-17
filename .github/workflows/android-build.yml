@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -22,16 +24,29 @@ jobs:
           cache: gradle
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: 34
-          build-tools: 34.0.0
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Grant execute permission
         run: chmod +x gradlew
 
+      - name: Generate changelog asset
+        run: |
+          export TZ=Asia/Shanghai
+          mkdir -p mobile/src/main/assets
+          {
+            echo "# omi4wOS 更新记录（自动生成 · 最新在前）"
+            echo ""
+            git log -60 --date=format:'%Y-%m-%d %H:%M' --pretty=format:'%h | %cd | %s' | head -60
+          } > mobile/src/main/assets/changelog.txt
+          echo "changelog.txt generated: $(wc -l < mobile/src/main/assets/changelog.txt) lines"
+
       - name: Build mobile APK
-        run: ./gradlew :mobile:assembleDebug
+        run: ./gradlew :mobile:assembleDebug -PbuildNumber=${{ github.run_number }}
 
       - name: Build wear APK
         run: ./gradlew :wear:assembleDebug

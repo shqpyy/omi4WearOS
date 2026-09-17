@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="speech_audio_cache" path="speech_audio/" />
+    <!-- 应用日志目录（filesDir/logs/），供首页「导出日志」分享 -->
+    <files-path name="app_logs" path="logs/" />
 </paths>
