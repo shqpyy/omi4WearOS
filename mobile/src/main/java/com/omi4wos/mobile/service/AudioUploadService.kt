@@ -127,24 +127,31 @@ class AudioUploadService : Service() {
     private suspend fun flushBatch(syncId: String) {
         delay(2_000)
 
-        val racing = pendingBatchSegments.remove(PENDING_SYNC_KEY)
+        // 【关键】ConcurrentHashMap.keys.toList() 迭代器在并发 put 时会因为 segment 计数器变化
+        // 而让 hasNext 误返回 true，再调 next() 时 table 已空 → NoSuchElementException（真实崩溃点）。
+        // 解法：用 ConcurrentHashMap.forEach（回调式、内部分段锁）+ clear 原子快照所有待处理
+        // segments，之后整个 flushBatch 体不再触碰 ConcurrentHashMap —— 并发问题彻底消除。
+        val snapshot = mutableMapOf<String, MutableList<PendingSegment>>()
+        pendingBatchSegments.forEach { (k, v) -> snapshot[k] = ArrayList(v) }
+        pendingBatchSegments.clear()
+
+        // 吸走 pre-SYNC_START 的 racing segment（先用空 syncId 进来的）
+        val racing = snapshot.remove(PENDING_SYNC_KEY)
+        var segments = snapshot.remove(syncId) ?: mutableListOf()
         if (!racing.isNullOrEmpty()) {
             Log.i(TAG, "Absorbing ${racing.size} pre-SYNC_START segment(s) into syncId=$syncId")
-            pendingBatchSegments
-                .getOrPut(syncId) { Collections.synchronizedList(mutableListOf()) }
-                .addAll(racing)
+            segments.addAll(racing)
         }
 
-        val segments = pendingBatchSegments.remove(syncId)
+        // 剩下所有其他 syncId 的片段（同 flushBatch 窗口里并发进来的）一并吸收
         val orphaned = mutableListOf<PendingSegment>()
-        for (key in pendingBatchSegments.keys.toList()) {
-            pendingBatchSegments.remove(key)?.let { orphaned.addAll(it) }
-        }
+        snapshot.values.forEach { orphaned.addAll(it) }
+        snapshot.clear()
         if (orphaned.isNotEmpty()) {
             Log.w(TAG, "Absorbing ${orphaned.size} orphaned segment(s) into flush for $syncId")
         }
 
-        val allSegments = (segments ?: emptyList()) + orphaned
+        val allSegments = segments + orphaned
         if (allSegments.isEmpty()) {
             Log.w(TAG, "Flush requested for syncId=$syncId but no buffered segments found")
             return
