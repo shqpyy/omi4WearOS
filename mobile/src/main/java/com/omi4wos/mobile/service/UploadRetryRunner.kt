@@ -134,7 +134,7 @@ suspend fun runUploadRetry(context: Context, onProgress: ((String) -> Unit)? = n
         else -> "Nothing to retry"
     }
     onProgress?.invoke(msg)
-    return RetryResult(anySucceeded, succeeded, failed, msg)
+    return RetryResult(succeeded > 0, succeeded, failed, msg)
 }
 
 /** 重试结果 */
