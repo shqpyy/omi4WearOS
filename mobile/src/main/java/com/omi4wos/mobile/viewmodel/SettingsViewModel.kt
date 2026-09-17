@@ -51,6 +51,9 @@ data class SettingsUiState(
     val locationEnabled: Boolean = true,
     val locationIntervalMin: Int = 15,
 
+    // 通话时暂停手表录音
+    val callPauseEnabled: Boolean = true,
+
     // 语言（system / en / zh-CN）
     val language: String = OmiConfig.DEFAULT_LANGUAGE,
 
@@ -92,6 +95,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 phoneWatchInterval = config.phoneWatcher.scanIntervalSec,
                 locationEnabled = config.location.enabled,
                 locationIntervalMin = config.location.intervalMin,
+                callPauseEnabled = config.callPause.enabled,
                 language = config.language
             )
         }
@@ -212,6 +216,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    // ---- 通话时暂停手表录音 ----
+    // 开关即时生效: 拨动即保存, 手表端监听通过重启 WatchReceiverService 感知
+    fun updateCallPauseEnabled(value: Boolean) {
+        _uiState.value = _uiState.value.copy(callPauseEnabled = value)
+        viewModelScope.launch {
+            val current = omiConfig.getConfig()
+            omiConfig.saveConfig(
+                current.copy(callPause = current.callPause.copy(enabled = value))
+            )
+        }
+    }
+
     // ---- 保存 ----
     fun saveSettings() {
         viewModelScope.launch {
@@ -243,6 +259,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         location = OmiConfig.LocationConfig(
                             enabled = state.locationEnabled,
                             intervalMin = state.locationIntervalMin.coerceIn(1, 1440)
+                        ),
+                        callPause = OmiConfig.CallPauseConfig(
+                            enabled = state.callPauseEnabled
                         ),
                         language = state.language
                     )
@@ -298,6 +317,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         location = OmiConfig.LocationConfig(
                             enabled = state.locationEnabled,
                             intervalMin = state.locationIntervalMin.coerceIn(1, 1440)
+                        ),
+                        callPause = OmiConfig.CallPauseConfig(
+                            enabled = state.callPauseEnabled
                         ),
                         language = state.language
                     )

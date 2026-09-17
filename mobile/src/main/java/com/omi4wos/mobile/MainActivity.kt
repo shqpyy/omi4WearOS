@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val LOCATION_PERMISSION_CODE = 4101
+        private const val PHONE_STATE_PERMISSION_CODE = 4102
     }
 
     /**
@@ -67,6 +68,7 @@ class MainActivity : ComponentActivity() {
         scheduleUploadRetry()
         requestBatteryOptimizationExemption()
         maybeRequestLocationPermission()
+        maybeRequestPhoneStatePermission()
         setContent {
             MobileApp()
         }
@@ -86,6 +88,22 @@ class MainActivity : ComponentActivity() {
             Log.i(TAG, "Requesting location permission for periodic upload")
             AppLog.i(TAG, "请求定位权限: ${needed.joinToString()}")
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), LOCATION_PERMISSION_CODE)
+        }
+    }
+
+    /**
+     * 首次启动时请求 READ_PHONE_STATE（用于通话时暂停手表录音）。只请求一次；
+     * 拒绝后该功能静默不生效, 可在系统设置重新授权。
+     */
+    private fun maybeRequestPhoneStatePermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+            != PackageManager.PERMISSION_GRANTED) {
+            Log.i(TAG, "Requesting READ_PHONE_STATE permission for call pause")
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.READ_PHONE_STATE),
+                PHONE_STATE_PERMISSION_CODE
+            )
         }
     }
 

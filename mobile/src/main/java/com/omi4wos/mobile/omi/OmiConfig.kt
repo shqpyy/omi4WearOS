@@ -72,6 +72,11 @@ class OmiConfig(private val context: Context) {
         val intervalMin: Int = 15       // 采样间隔（分钟）
     )
 
+    /** 通话时暂停手表录音配置 */
+    data class CallPauseConfig(
+        val enabled: Boolean = true     // 开关, 默认开
+    )
+
     /** 顶层配置聚合 */
     data class Config(
         val storageMethod: StorageMethod = StorageMethod.LOCAL_FILE,
@@ -80,6 +85,7 @@ class OmiConfig(private val context: Context) {
         val s3: S3Config = S3Config(),
         val phoneWatcher: PhoneWatcherConfig = PhoneWatcherConfig(),
         val location: LocationConfig = LocationConfig(),
+        val callPause: CallPauseConfig = CallPauseConfig(),
         val language: String = DEFAULT_LANGUAGE
     )
 
@@ -118,6 +124,9 @@ class OmiConfig(private val context: Context) {
         private val KEY_LOC_ENABLED = booleanPreferencesKey("loc_enabled")
         private val KEY_LOC_INTERVAL = intPreferencesKey("loc_interval")
 
+        // Call pause (通话时暂停手表录音)
+        private val KEY_CALL_PAUSE_ENABLED = booleanPreferencesKey("call_pause_enabled")
+
         // Language
         private val KEY_LANGUAGE = stringPreferencesKey("language")
     }
@@ -153,6 +162,9 @@ class OmiConfig(private val context: Context) {
                     enabled = prefs[KEY_LOC_ENABLED] ?: true,
                     intervalMin = prefs[KEY_LOC_INTERVAL] ?: 15
                 ),
+                callPause = CallPauseConfig(
+                    enabled = prefs[KEY_CALL_PAUSE_ENABLED] ?: true
+                ),
                 language = prefs[KEY_LANGUAGE] ?: DEFAULT_LANGUAGE
             )
         }.first()
@@ -176,6 +188,7 @@ class OmiConfig(private val context: Context) {
             prefs[KEY_PW_INTERVAL] = config.phoneWatcher.scanIntervalSec
             prefs[KEY_LOC_ENABLED] = config.location.enabled
             prefs[KEY_LOC_INTERVAL] = config.location.intervalMin
+            prefs[KEY_CALL_PAUSE_ENABLED] = config.callPause.enabled
             prefs[KEY_LANGUAGE] = config.language
         }
     }

@@ -105,6 +105,8 @@
 
     <string name='location_title'>Location upload</string>
     <string name='location_desc'>Periodically reports the phone\'s approximate position to your server (low battery impact).</string>
+    <string name='call_pause_title'>Pause watch recording during calls</string>
+    <string name='call_pause_desc'>When you make or pick up a call, the watch recording is paused automatically and resumes after hanging up, so redundant call audio isn\'t recorded.</string>
     <string name='location_interval'>Report interval (minutes)</string>
     <string name='home_crash_title'>Last crash log</string>
     <string name='home_crash_clear'>Clear</string>

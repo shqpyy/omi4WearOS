@@ -105,6 +105,8 @@
 
     <string name='location_title'>位置上报</string>
     <string name='location_desc'>周期性把手机的大致位置上报到你自己的服务器（低耗电）。</string>
+    <string name='call_pause_title'>通话时暂停手表录音</string>
+    <string name='call_pause_desc'>打电话或接听时自动暂停手表录音，挂断后恢复，避免录到冗余的通话环境声。</string>
     <string name='location_interval'>上报间隔（分钟）</string>
     <string name='home_crash_title'>上次崩溃日志</string>
     <string name='home_crash_clear'>清除</string>

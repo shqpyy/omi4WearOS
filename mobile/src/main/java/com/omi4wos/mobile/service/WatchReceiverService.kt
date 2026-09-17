@@ -1,10 +1,12 @@
 package com.omi4wos.mobile.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
@@ -12,9 +14,16 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.Wearable
+import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.shared.Constants
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Persistent foreground service that holds a MessageClient listener so messages
@@ -33,6 +42,8 @@ class WatchReceiverService : Service() {
 
     private lateinit var messageClient: MessageClient
     private var locationUploader: LocationUploader? = null
+    private var callStateListener: CallStateListener? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** 周期刷新通知时间戳, 让状态栏显示相对时间(刚刚/几分钟前), 而非停滞的绝对时刻 */
     private val handler = Handler(Looper.getMainLooper())
@@ -73,10 +84,33 @@ class WatchReceiverService : Service() {
         if (locationUploader == null) {
             locationUploader = LocationUploader.get(applicationContext).also { it.startOnce() }
         }
+        syncCallPauseListener()
         handler.removeCallbacks(refreshRunnable)
         handler.postDelayed(refreshRunnable, REFRESH_INTERVAL_MS)
         startOrRefreshForeground()
         return START_STICKY
+    }
+
+    /**
+     * 按配置同步通话暂停监听：开启且已授予 READ_PHONE_STATE 则注册，否则注销。
+     * 默认开启（callPause.enabled 默认 true）；无权限时静默不生效。
+     */
+    private fun syncCallPauseListener() {
+        serviceScope.launch {
+            val cfg = runCatching { OmiConfig(applicationContext).getConfig() }.getOrNull()
+            val enabled = cfg?.callPause?.enabled != false
+            val hasPerm = ContextCompat.checkSelfPermission(
+                applicationContext, Manifest.permission.READ_PHONE_STATE
+            ) == PackageManager.PERMISSION_GRANTED
+            if (enabled && hasPerm) {
+                if (callStateListener == null) {
+                    callStateListener = CallStateListener(applicationContext).also { it.register() }
+                }
+            } else {
+                callStateListener?.unregister()
+                callStateListener = null
+            }
+        }
     }
 
     /** 重建并重发通知, 时间戳随之刷新为当前时间 */
@@ -135,6 +169,9 @@ class WatchReceiverService : Service() {
         handler.removeCallbacks(refreshRunnable)
         locationUploader?.stop()
         locationUploader = null
+        callStateListener?.destroy()
+        callStateListener = null
+        serviceScope.cancel()
         messageClient.removeListener(messageListener)
         Log.i(TAG, "Watch message listener unregistered")
         AppLog.i(TAG, "onDestroy: 注销手表消息监听")

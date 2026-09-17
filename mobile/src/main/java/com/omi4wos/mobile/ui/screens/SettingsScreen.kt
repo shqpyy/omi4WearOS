@@ -1,4 +1,4 @@
-﻿package com.omi4wos.mobile.ui.screens
+package com.omi4wos.mobile.ui.screens
 
 import android.app.Activity
 import android.content.Context
@@ -210,7 +210,15 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // === 6. 保活引导 ===
+        // === 6. 通话时暂停手表录音 ===
+        CallPauseCard(
+            uiState = uiState,
+            onEnabledChange = viewModel::updateCallPauseEnabled
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // === 7. 保活引导 ===
         KeepAliveCard(
             context = context,
             snackbarHostState = snackbarHostState
@@ -692,6 +700,44 @@ private fun LocationSettingsCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun CallPauseCard(
+    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
+    onEnabledChange: (Boolean) -> Unit
+) {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = context.getString(R.string.call_pause_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = uiState.callPauseEnabled,
+                    onCheckedChange = onEnabledChange
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = context.getString(R.string.call_pause_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

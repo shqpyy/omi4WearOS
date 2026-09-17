@@ -19,6 +19,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- 后台定位: 必须在清单声明, 否则系统设置页不会出现「始终允许」选项 -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
     <!-- Wake lock — keep service alive during upload -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
