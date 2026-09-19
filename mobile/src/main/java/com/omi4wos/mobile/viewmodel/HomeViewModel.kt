@@ -70,25 +70,30 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<HomeUiState> = _uiState
 
     init {
-        messageClient.addListener(messageListener)
-        observeState()
-        queryWatchRecordingState()
-        retryPendingUploads()
-        // 读取存储方式, 用于首页"已上传到…"的动态文案
-        viewModelScope.launch {
-            val method = OmiConfig(getApplication()).getConfig().storageMethod
-            _uiState.value = _uiState.value.copy(storageMethod = method)
-        }
-        // 定位上报状态 (权限/最近成败/坐标)
-        viewModelScope.launch {
-            LocationStatus.status.collect { status ->
-                _uiState.value = _uiState.value.copy(location = status)
+        try {
+            messageClient.addListener(messageListener)
+            observeState()
+            queryWatchRecordingState()
+            // retryPendingUploads() 不再自动调用，只在用户点按钮时触发
+            // 读取存储方式, 用于首页"已上传到…"的动态文案
+            viewModelScope.launch {
+                val method = OmiConfig(getApplication()).getConfig().storageMethod
+                _uiState.value = _uiState.value.copy(storageMethod = method)
             }
+            // 定位上报状态 (权限/最近成败/坐标)
+            viewModelScope.launch {
+                LocationStatus.status.collect { status ->
+                    _uiState.value = _uiState.value.copy(location = status)
+                }
+            }
+            viewModelScope.launch { LocationUploader.refreshStatus(getApplication()) }
+            // 上次崩溃的堆栈(如果有), 直接摆在首页便于远程排错
+            _uiState.value = _uiState.value.copy(lastCrash = CrashLogger.last(getApplication()))
+            refreshLogInfo()
+        } catch (e: Throwable) {
+            AppLog.e("HomeViewModel", "init failed", e)
+            _uiState.value = _uiState.value.copy(lastCrash = "ViewModel init: ${e.message}")
         }
-        viewModelScope.launch { LocationUploader.refreshStatus(getApplication()) }
-        // 上次崩溃的堆栈(如果有), 直接摆在首页便于远程排错
-        _uiState.value = _uiState.value.copy(lastCrash = CrashLogger.last(getApplication()))
-        refreshLogInfo()
     }
 
     /** 刷新日志体积，展示在首页「应用日志」卡片。 */

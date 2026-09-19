@@ -60,28 +60,81 @@ class MainActivity : ComponentActivity() {
         try {
             super.onCreate(savedInstanceState)
         } catch (e: Throwable) {
-            // 兜底：恢复态崩通常在这里炸，先记日志再抛，保证下次能导出
-            AppLog.install(this)
-            CrashLogger.install(this)
+            // 恢复态崩兜底：先装日志，记一步，再抛，保证下次能进来看日志
+            runCatching { AppLog.install(this) }
+            runCatching { CrashLogger.install(this) }
             AppLog.e("MainActivity", "super.onCreate failed", e)
             CrashLogger.markStep(this, "MainActivity.onCreate restore crash")
-            throw e
+            showFatalError(e)
+            return
         }
 
-        // 最早时机安装日志 + 崩溃记录器: 崩溃堆栈落盘, 下次打开在首页可见/可导出
+        // 最早时机安装日志 + 崩溃记录器
         AppLog.install(this)
         CrashLogger.install(this)
 
-        // Start the persistent foreground service that receives watch messages
-        ContextCompat.startForegroundService(
-            this, Intent(this, WatchReceiverService::class.java)
-        )
-        scheduleUploadRetry()
-        requestBatteryOptimizationExemption()
-        maybeRequestLocationPermission()
-        maybeRequestPhoneStatePermission()
+        try {
+            // Start the persistent foreground service that receives watch messages
+            ContextCompat.startForegroundService(
+                this, Intent(this, WatchReceiverService::class.java)
+            )
+            scheduleUploadRetry()
+            requestBatteryOptimizationExemption()
+            maybeRequestLocationPermission()
+            maybeRequestPhoneStatePermission()
+            setContent {
+                MobileApp()
+            }
+        } catch (e: Throwable) {
+            // 初始化阶段兜底：任何后续步骤崩，都先记日志，然后显示错误页而不是直接闪退
+            AppLog.e("MainActivity", "init failed", e)
+            CrashLogger.markStep(this, "MainActivity.init crash")
+            showFatalError(e)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+        val label = if (requestCode == LOCATION_PERMISSION_CODE) {"定位"} else if (requestCode == PHONE_STATE_PERMISSION_CODE) {"电话"} else {"其他"}
+        AppLog.i("MainActivity", "权限回调: $label 授权=$granted")
+        // 授权后显式刷新一次状态，避免隐式重建导致的状态不一致
+        if (granted) {
+            AppLog.i("MainActivity", "权限已授予，刷新相关状态")
+        }
+    }
+
+    /** 显示纯文本错误页，保证用户即使 UI 崩了也能进来看日志导出 */
+    private fun showFatalError(e: Throwable) {
         setContent {
-            MobileApp()
+            Omi4wosTheme {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "App 启动失败",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color(0xFFB71C1C)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "${e.javaClass.name}: ${e.message ?: ""}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "请导出应用日志并发送给开发者：设置 → 应用日志 → 导出",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 
