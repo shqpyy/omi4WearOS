@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onRequestPermissionsResult(
+    fun onRequestPermissionsResult(
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -107,20 +107,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** 兜底：不让系统默认崩溃页吞掉信息 */
-    override fun onDestroy() {
-        super.onDestroy()
-        try {
-            AppLog.flushPending(this)
-        } catch (_: Throwable) {}
-    }
-
     /** 显示纯文本错误页，保证用户即使 UI 崩了也能进来看日志导出 */
     private fun showFatalError(e: Throwable) {
         val textView = android.widget.TextView(this).apply {
             text = "App 启动失败\n\n${e.javaClass.name}: ${e.message ?: ""}\n\n请导出应用日志并发送给开发者：设置 → 应用日志 → 导出"
             textSize = 16f
-            setTextColor(0xFFB71C1C)
+            setTextColor(0xFFB71C1C.toInt())
             setPadding(48, 48, 48, 48)
         }
         setContentView(textView)
@@ -139,7 +131,7 @@ class MainActivity : ComponentActivity() {
         if (needed.isNotEmpty()) {
             Log.i(TAG, "Requesting location permission for periodic upload")
             AppLog.i(TAG, "请求定位权限: ${needed.joinToString()}")
-            ActivityCompat.requestPermissions(this, needed.toTypedArray(), LOCATION_PERMISSION_CODE)
+            ActivityCompat.requestPermissions(this, needed.toTypedArray<String>(), LOCATION_PERMISSION_CODE)
         }
     }
 
