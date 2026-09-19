@@ -125,8 +125,8 @@ class WatchReceiverService : Service() {
                     callStateListener?.unregister()
                     callStateListener = null
                 }
-            }.onFailure {
-                AppLog.e(TAG, "同步通话监听失败（已忽略，不影响服务）", it)
+            }.onFailure { err ->
+                AppLog.e(TAG, "同步通话监听失败（已忽略，不影响服务）", err)
                 callStateListener = null
             }
         }
