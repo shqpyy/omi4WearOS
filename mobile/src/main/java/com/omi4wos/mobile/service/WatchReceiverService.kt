@@ -99,20 +99,34 @@ class WatchReceiverService : Service() {
     /**
      * 按配置同步通话暂停监听：开启且已授予 READ_PHONE_STATE 则注册，否则注销。
      * 默认开启（callPause.enabled 默认 true）；无权限时静默不生效。
+     *
+     * 【2026-09-20 修复 P0】整段包 runCatching。本方法跑在 Dispatchers.IO，
+     * 而 CallStateListener 的父类构造在旧版会因缺少 Looper 抛 NPE；
+     * 该 NPE 以前经协程作用域冒泡成未捕获异常 → 进程崩溃 → START_STICKY 重建 →
+     * 再次进入本方法 → 再崩，形成永久闪退。父类构造器已修为传主线程 Looper，
+     * 这里再加一层保险：任何构造/注册异常都不得掀翻服务进程。
+     *
+     * 注：用 SupervisorJob 的 scope 不保证捕获 —— launch 内的异常若未被捕获
+     * 会走 CoroutineExceptionHandler → 默认处理器 → 进程崩溃。所以必须就地捕获。
      */
     private fun syncCallPauseListener() {
         serviceScope.launch {
-            val cfg = runCatching { OmiConfig(applicationContext).getConfig() }.getOrNull()
-            val enabled = cfg?.callPause?.enabled != false
-            val hasPerm = ContextCompat.checkSelfPermission(
-                applicationContext, Manifest.permission.READ_PHONE_STATE
-            ) == PackageManager.PERMISSION_GRANTED
-            if (enabled && hasPerm) {
-                if (callStateListener == null) {
-                    callStateListener = CallStateListener(applicationContext).also { it.register() }
+            runCatching {
+                val cfg = runCatching { OmiConfig(applicationContext).getConfig() }.getOrNull()
+                val enabled = cfg?.callPause?.enabled != false
+                val hasPerm = ContextCompat.checkSelfPermission(
+                    applicationContext, Manifest.permission.READ_PHONE_STATE
+                ) == PackageManager.PERMISSION_GRANTED
+                if (enabled && hasPerm) {
+                    if (callStateListener == null) {
+                        callStateListener = CallStateListener(applicationContext).also { it.register() }
+                    }
+                } else {
+                    callStateListener?.unregister()
+                    callStateListener = null
                 }
-            } else {
-                callStateListener?.unregister()
+            }.onFailure {
+                AppLog.e(TAG, "同步通话监听失败（已忽略，不影响服务）", it)
                 callStateListener = null
             }
         }
