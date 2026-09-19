@@ -123,15 +123,17 @@ class MainActivity : ComponentActivity() {
      * 若用户拒绝, LocationUploader 会自动跳过采样, 后续可在系统设置重新授权。
      */
     private fun maybeRequestLocationPermission() {
-        val needed = arrayOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-
+        val needed = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
         if (needed.isNotEmpty()) {
             Log.i(TAG, "Requesting location permission for periodic upload")
             AppLog.i(TAG, "请求定位权限: ${needed.joinToString()}")
-            ActivityCompat.requestPermissions(this, needed.toTypedArray<String>(), LOCATION_PERMISSION_CODE)
+            ActivityCompat.requestPermissions(this, needed.toTypedArray(), LOCATION_PERMISSION_CODE)
         }
     }
 
