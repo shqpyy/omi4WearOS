@@ -108,34 +108,13 @@ class MainActivity : ComponentActivity() {
 
     /** 显示纯文本错误页，保证用户即使 UI 崩了也能进来看日志导出 */
     private fun showFatalError(e: Throwable) {
-        setContent {
-            Omi4wosTheme {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "App 启动失败",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color(0xFFB71C1C)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "${e.javaClass.name}: ${e.message ?: ""}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "请导出应用日志并发送给开发者：设置 → 应用日志 → 导出",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+        val textView = android.widget.TextView(this).apply {
+            text = "App 启动失败\n\n${e.javaClass.name}: ${e.message ?: ""}\n\n请导出应用日志并发送给开发者：设置 → 应用日志 → 导出"
+            textSize = 16f
+            setTextColor(0xFFB71C1C)
+            setPadding(48, 48, 48, 48)
         }
+        setContentView(textView)
     }
 
     /**
