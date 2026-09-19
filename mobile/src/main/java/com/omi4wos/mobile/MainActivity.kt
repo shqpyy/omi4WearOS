@@ -42,9 +42,14 @@ class MainActivity : ComponentActivity() {
      * API 33+ 会自动 recreate；API < 33 下次启动时这里会应用新语言。
      */
     override fun attachBaseContext(newBase: android.content.Context) {
+        // 注意：这里绝不能 runBlocking 阻塞主线程读 DataStore。
+        // attachBaseContext 是 Activity 生命周期最早阶段（早于 onCreate），
+        // 一旦 DataStore 有残留文件锁，主线程就会死锁 → ANR / 连续崩溃，
+        // 而且此时 showFatalError 兜底还没机会安装，用户只能看到闪退。
+        // 因此改为顺序读先前落盘的轻量镜像文件（同步 I/O，微秒级，无挂起风险）。
         val lang = try {
-            runBlocking { OmiConfig(newBase).getConfig().language }
-        } catch (_: Exception) { OmiConfig.DEFAULT_LANGUAGE }
+            OmiConfig.readLanguageSync(newBase)
+        } catch (t: Throwable) { OmiConfig.DEFAULT_LANGUAGE }
 
         val wrapped = if (lang != "system") {
             val locale = Locale.forLanguageTag(lang)
@@ -107,15 +112,65 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** 显示纯文本错误页，保证用户即使 UI 崩了也能进来看日志导出 */
+    /**
+     * 显示纯文本错误页，保证用户即使 UI 崩了也能进来看日志导出。
+     *
+     * 关键：这个页面**不用 Compose**，只用原生 View —— 因为崩溃很可能就发生在
+     * Compose 初始化阶段，用 Compose 兜底等于没兜。
+     *
+     * 按钮作用：
+     * - 「导出错误信息」：把堆栈发出来（闪退时进不去设置页，只能从这里拿）
+     * - 「清空配置并重试」：一键复位 DataStore，避免坏配置导致永远进不去
+     */
     private fun showFatalError(e: Throwable) {
-        val textView = android.widget.TextView(this).apply {
-            text = "App 启动失败\n\n${e.javaClass.name}: ${e.message ?: ""}\n\n请导出应用日志并发送给开发者：设置 → 应用日志 → 导出"
-            textSize = 16f
-            setTextColor(0xFFB71C1C.toInt())
-            setPadding(48, 48, 48, 48)
+        val detail = buildString {
+            append("App 启动失败\n\n")
+            append("${e.javaClass.name}: ${e.message ?: ""}\n\n")
+            e.stackTrace.take(20).forEach { append("  at $it\n") }
+            append("\n最近一步: ${runCatching { CrashLogger.lastStep(this@MainActivity) }.getOrNull() ?: "?"}\n")
+            append("\n如果反复出现，请点「清空配置并重试」。")
         }
-        setContentView(textView)
+
+        val scroll = android.widget.ScrollView(this).apply {
+            setPadding(48, 48, 48, 48)
+            addView(android.widget.TextView(this@MainActivity).apply {
+                text = detail
+                textSize = 14f
+                setTextColor(0xFFB71C1C.toInt())
+                setTextIsSelectable(true)
+            })
+        }
+
+        val exportBtn = android.widget.Button(this).apply {
+            text = "导出错误信息"
+            setOnClickListener {
+                runCatching { AppLog.shareAsText(this@MainActivity, "omi4wOS 启动失败", detail) }
+            }
+        }
+        val resetBtn = android.widget.Button(this).apply {
+            text = "清空配置并重试"
+            setOnClickListener {
+                runCatching {
+                    kotlinx.coroutines.runBlocking { OmiConfig(this@MainActivity).clearConfig() }
+                }
+                android.widget.Toast.makeText(
+                    this@MainActivity, "配置已清空，请重新打开 App", android.widget.Toast.LENGTH_LONG
+                ).show()
+                finish()
+            }
+        }
+
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            addView(scroll, android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(android.widget.LinearLayout(this@MainActivity).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                addView(exportBtn)
+                addView(resetBtn)
+            })
+        }
+        setContentView(layout)
     }
 
     /**

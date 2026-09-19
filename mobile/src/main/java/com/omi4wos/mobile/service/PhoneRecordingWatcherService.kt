@@ -98,6 +98,9 @@ class PhoneRecordingWatcherService : Service() {
     private val processedFiles = mutableSetOf<String>()
     private var processedListFile: File? = null
 
+    /** 从 tree URI 解析出的持久化权限状态（供 Home 诊断面板展示） */
+    private var lastTreeUriOk: Boolean? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {

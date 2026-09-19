@@ -76,7 +76,6 @@ class OmiConfig(private val context: Context) {
     data class CallPauseConfig(
         val enabled: Boolean = true     // 开关, 默认开
     )
-
     /** 顶层配置聚合 */
     data class Config(
         val storageMethod: StorageMethod = StorageMethod.LOCAL_FILE,
@@ -191,6 +190,9 @@ class OmiConfig(private val context: Context) {
             prefs[KEY_CALL_PAUSE_ENABLED] = config.callPause.enabled
             prefs[KEY_LANGUAGE] = config.language
         }
+        // 同步落一份语言镜像，供下次 attachBaseContext 无阻塞读取。
+        // 用带限定符的调用，避免与类内其他 companion object 解析歧义。
+        OmiConfig.writeLanguageMirror(context, config.language)
     }
 
     fun observeConfig() = context.dataStore.data.map { prefs ->
@@ -229,5 +231,43 @@ class OmiConfig(private val context: Context) {
 
     suspend fun clearConfig() {
         context.dataStore.edit { it.clear() }
+        runCatching { languageMirrorFile(context).delete() }
+    }
+
+    companion object LanguageMirror {
+        private const val MIRROR_FILE = "language_mirror.txt"
+
+        private fun languageMirrorFile(context: Context): java.io.File =
+            java.io.File(context.filesDir, MIRROR_FILE)
+
+        /**
+         * 把当前语言写一份到普通文件，供 [readLanguageSync] 在 Activity
+         * 最早阶段（attachBaseContext）无阻塞读取。
+         *
+         * 为什么需要：attachBaseContext 早于 onCreate，此时绝不能 runBlocking
+         * 去等 DataStore（主线程死锁 → ANR / 连续崩溃，且兜底界面还没装上）。
+         * DataStore 是异步的，只能同步读这份镜像；写失败不影响主流程。
+         */
+        internal fun writeLanguageMirror(context: Context, language: String) {
+            runCatching { languageMirrorFile(context).writeText(language) }
+        }
+
+        /**
+         * 同步读取语言（无挂起、无锁等待）。任何异常都回退默认值，
+         * 保证 attachBaseContext 永远不会因为配置读不到而崩。
+         */
+        fun readLanguageSync(context: Context): String {
+            return try {
+                val f = languageMirrorFile(context)
+                if (f.exists()) {
+                    val v = f.readText().trim()
+                    if (v.isNotEmpty()) v else DEFAULT_LANGUAGE
+                } else {
+                    DEFAULT_LANGUAGE
+                }
+            } catch (_: Throwable) {
+                DEFAULT_LANGUAGE
+            }
+        }
     }
 }

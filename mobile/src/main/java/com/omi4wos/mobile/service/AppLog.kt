@@ -215,6 +215,35 @@ object AppLog {
         }
     }
 
+    /**
+     * 把日志转成一个「一定打得开」的纯文本内容，供错误页分享。
+     *
+     * 为什么不用 [share]：闪退场景下 Activity 常常处于异常状态，
+     * 直接起系统分享可能二次失败；这里退化成最原始的 ACTION_SEND，
+     * 任何有文本处理能力的 App 都能接。
+     */
+    fun shareAsText(context: Context, subject: String, body: String): Boolean {
+        return try {
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, body)
+            }
+            val chooser = Intent.createChooser(send, subject)
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(chooser)
+            true
+        } catch (t: Throwable) {
+            try {
+                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                cm?.setPrimaryClip(ClipData.newPlainText(subject, body))
+                true
+            } catch (_: Throwable) {
+                false
+            }
+        }
+    }
+
     private fun toast(context: Context, msg: String) {
         runCatching {
             Handler(Looper.getMainLooper()).post {
