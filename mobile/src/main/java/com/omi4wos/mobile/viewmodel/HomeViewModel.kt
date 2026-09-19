@@ -92,6 +92,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             refreshLogInfo()
         } catch (e: Throwable) {
             AppLog.e("HomeViewModel", "init failed", e)
+            CrashLogger.install(getApplication())
+            CrashLogger.markStep(getApplication(), "ViewModel init crash")
             _uiState.value = _uiState.value.copy(lastCrash = "ViewModel init: ${e.message}")
         }
     }

@@ -107,6 +107,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** 兜底：不让系统默认崩溃页吞掉信息 */
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            AppLog.flushPending(this)
+        } catch (_: Throwable) {}
+    }
+}
+
     /** 显示纯文本错误页，保证用户即使 UI 崩了也能进来看日志导出 */
     private fun showFatalError(e: Throwable) {
         val textView = android.widget.TextView(this).apply {
