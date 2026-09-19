@@ -26,10 +26,10 @@ android {
         applicationId = "com.omi4wos"
         minSdk = 28
         targetSdk = 34
-        // 2026-09-18: 提到 13（> wear 的 12），保证手机端 APK 能覆盖安装
+        // 2026-09-20: 提到 14（> wear 的 12），保证手机端 APK 能覆盖安装
         // 两个模块 applicationId 必须相同（Wear Data Layer 要求），故只能用版本号区分
-        versionCode = 13
-        versionName = "1.13.0"
+        versionCode = 14
+        versionName = "1.14.0"
 
         // CI 编译号：GitHub Actions run number（经 -PbuildNumber 传入），本地无参数时回退 "local"
         val buildNumber = providers.gradleProperty("buildNumber").orElse("local").get()

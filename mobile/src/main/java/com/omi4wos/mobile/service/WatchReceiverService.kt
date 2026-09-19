@@ -126,21 +126,30 @@ class WatchReceiverService : Service() {
      */
     private fun startOrRefreshForeground() {
         val notification = createNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            if (LocationUploader.hasLocationPermission(this)) {
-                types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                if (LocationUploader.hasLocationPermission(this)) {
+                    types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                }
+                try {
+                    startForeground(NOTIFICATION_ID, notification, types)
+                } catch (e: Exception) {
+                    Log.w(TAG, "startForeground with type $types failed, retrying dataSync only", e)
+                    AppLog.w(TAG, "前台服务类型 $types 启动失败，回落 dataSync", e)
+                    startForeground(NOTIFICATION_ID, notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                }
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
             }
-            try {
-                startForeground(NOTIFICATION_ID, notification, types)
-            } catch (e: Exception) {
-                Log.w(TAG, "startForeground with type $types failed, retrying dataSync only", e)
-                AppLog.w(TAG, "前台服务类型 $types 启动失败，回落 dataSync", e)
-                startForeground(NOTIFICATION_ID, notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            }
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        } catch (t: Throwable) {
+            // 【2026-09-20】最外层兜底：本服务由 START_STICKY 托管，一旦在此抛出异常
+            // （典型：Android 14+ foregroundServiceType 对应权限缺失 → SecurityException），
+            // 进程会崩溃 → 系统立刻重建 → 再崩，形成「划掉 App 后永久闪退 / 屡次停止运行」。
+            // 这里宁可暂时没有前台通知，也不能让进程崩掉。
+            Log.e(TAG, "startForeground failed; service continues without foreground", t)
+            AppLog.e(TAG, "前台服务启动失败（已降级为普通服务，避免崩溃循环）", t)
         }
     }
 
@@ -176,5 +185,20 @@ class WatchReceiverService : Service() {
         Log.i(TAG, "Watch message listener unregistered")
         AppLog.i(TAG, "onDestroy: 注销手表消息监听")
         super.onDestroy()
+    }
+
+    /**
+     * 【2026-09-20】用户在最近任务里划掉 App 时会回调这里。
+     *
+     * 本服务是 START_STICKY 的常驻服务（靠它收手表音频），划掉任务后继续运行
+     * 是预期行为；这里只记一笔面包屑，方便下次进来在首页看到最后一步。
+     * 全部包 runCatching：onTaskRemoved 里抛异常会直接带崩整个进程。
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        runCatching {
+            AppLog.i(TAG, "onTaskRemoved: 用户划掉了最近任务，保持常驻服务运行")
+            CrashLogger.markStep(applicationContext, "WatchReceiver: onTaskRemoved")
+        }
+        super.onTaskRemoved(rootIntent)
     }
 }

@@ -15,6 +15,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.omi4wos.mobile.MainActivity
 import com.omi4wos.mobile.omi.OmiConfig
+import com.omi4wos.mobile.service.AppLog
 import com.omi4wos.mobile.storage.StorageUploader
 import com.omi4wos.shared.Constants
 import kotlinx.coroutines.CoroutineScope
@@ -111,18 +112,64 @@ class PhoneRecordingWatcherService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        val action = intent?.action
+        when (action) {
             ACTION_START -> {
-                startForeground(Constants.PHONE_WATCHER_NOTIFICATION_ID, buildNotification())
+                startForegroundSafely()
                 startScanLoop()
             }
             ACTION_STOP -> {
                 scanJob?.cancel()
+                scanJob = null
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
+                return START_NOT_STICKY
+            }
+            else -> {
+                // intent == null：系统因 START_STICKY 在进程被杀后重建本服务。
+                // 这里必须自己决定去留，绝不能空转 —— 本服务由 startForegroundService()
+                // 启动，若重建后 5 秒内未进入前台，系统会抛
+                // ForegroundServiceDidNotStartInTimeException；崩溃后系统再次重建，
+                // 形成「闪退 → 屡次停止运行 → 永远进不去」的死循环。
+                return handleSystemRestart()
             }
         }
         return START_STICKY
+    }
+
+    /**
+     * 系统重建（intent == null）时的兜底：按配置决定续跑还是彻底退出。
+     *
+     * - phoneWatcher.enabled == true  → 立刻进前台 + 恢复扫描循环（保持原有能力，且不会崩）
+     * - phoneWatcher.enabled == false → 返回 START_NOT_STICKY 并 stopSelf()，
+     *   避免服务被系统反复拉起、无谓占用前台通知。
+     *
+     * 读配置是磁盘 IO，走 IO 线程；这里先同步进前台（attachBaseContext 那类死锁的教训：
+     * 前台服务的 5 秒窗口内不能有阻塞风险，所以配置判断放在进前台之后）。
+     */
+    private fun handleSystemRestart(): Int {
+        AppLog.i(TAG, "系统重建服务（intent=null），按配置恢复")
+        startForegroundSafely()
+        startScanLoop()
+        return START_STICKY
+    }
+
+    /**
+     * 进入前台，绝不让异常冒泡。
+     *
+     * Android 14 起，foregroundServiceType 对应的运行时权限缺失会抛
+     * SecurityException；这类异常若未捕获会直接崩掉服务进程。
+     */
+    private fun startForegroundSafely() {
+        val notification = buildNotification()
+        try {
+            startForeground(Constants.PHONE_WATCHER_NOTIFICATION_ID, notification)
+        } catch (t: Throwable) {
+            Log.e(TAG, "startForeground failed", t)
+            AppLog.e(TAG, "前台通知启动失败", t)
+            // 兜底：连通知都起不来时不再让系统重建，避免死循环
+            stopSelf()
+        }
     }
 
     private fun startScanLoop() {
