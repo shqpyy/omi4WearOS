@@ -57,10 +57,21 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        try {
+            super.onCreate(savedInstanceState)
+        } catch (e: Throwable) {
+            // 兜底：恢复态崩通常在这里炸，先记日志再抛，保证下次能导出
+            AppLog.install(this)
+            CrashLogger.install(this)
+            AppLog.e("MainActivity", "super.onCreate failed", e)
+            CrashLogger.markStep(this, "MainActivity.onCreate restore crash")
+            throw e
+        }
+
         // 最早时机安装日志 + 崩溃记录器: 崩溃堆栈落盘, 下次打开在首页可见/可导出
         AppLog.install(this)
         CrashLogger.install(this)
+
         // Start the persistent foreground service that receives watch messages
         ContextCompat.startForegroundService(
             this, Intent(this, WatchReceiverService::class.java)
