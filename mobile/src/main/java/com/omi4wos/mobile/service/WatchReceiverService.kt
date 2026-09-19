@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -17,6 +18,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.Wearable
+import com.omi4wos.mobile.CrashLogActivity
 import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.shared.Constants
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +40,9 @@ class WatchReceiverService : Service() {
     companion object {
         private const val TAG = "WatchReceiverService"
         private const val NOTIFICATION_ID = 1003
+
+        /** 「导出冲突日志」动作按钮的 PendingIntent requestCode。 */
+        private const val REQUEST_EXPORT_LOG = 7301
     }
 
     private lateinit var messageClient: MessageClient
@@ -154,6 +159,17 @@ class WatchReceiverService : Service() {
     }
 
     private fun createNotification(): Notification {
+        // 【2026-09-20】加一个「导出冲突日志」动作按钮。
+        // 原因：进程级启动崩溃时用户根本进不去 App，之前的导出入口（首页卡片、
+        // 错误页按钮）全部失效。而常驻通知由**服务**发出，服务一旦活着就有点 ——
+        // 用户下拉通知栏就能把日志导出来发给我。
+        val exportIntent = CrashLogActivity.intent(this, exportOnly = true)
+        val exportPending = PendingIntent.getActivity(
+            this,
+            REQUEST_EXPORT_LOG,
+            exportIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         return NotificationCompat.Builder(this, Constants.MOBILE_NOTIFICATION_CHANNEL_ID)
             .setContentTitle("omi4wOS")
             .setContentText("Listening for watch audio…")
@@ -162,6 +178,7 @@ class WatchReceiverService : Service() {
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .addAction(0, "导出冲突日志", exportPending)
             .build()
     }
 
