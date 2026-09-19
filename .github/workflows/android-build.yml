@@ -21,7 +21,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-          cache: gradle
 
       - name: Setup Android SDK
         run: |
@@ -45,11 +44,17 @@ jobs:
           } > mobile/src/main/assets/changelog.txt
           echo "changelog.txt generated: $(wc -l < mobile/src/main/assets/changelog.txt) lines"
 
+      - name: Clean stale build outputs
+        run: |
+          ./gradlew --stop || true
+          rm -rf ~/.gradle/caches/build-cache-1 || true
+          ./gradlew clean --no-build-cache || true
+
       - name: Build mobile APK
-        run: ./gradlew :mobile:assembleDebug -PbuildNumber=${{ github.run_number }}
+        run: ./gradlew :mobile:assembleDebug -PbuildNumber=${{ github.run_number }} --no-build-cache --rerun-tasks
 
       - name: Build wear APK
-        run: ./gradlew :wear:assembleDebug
+        run: ./gradlew :wear:assembleDebug --no-build-cache --rerun-tasks
 
       - name: Upload mobile APK
         uses: actions/upload-artifact@v4
