@@ -1,10 +1,10 @@
 package com.omi4wos.mobile.service
 
 import android.content.Context
-import android.os.Looper
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.Wearable
 import com.omi4wos.shared.DataLayerPaths
@@ -31,9 +31,9 @@ import kotlinx.coroutines.tasks.await
  * 注意：需要 READ_PHONE_STATE 运行时权限；无权限时 listen 抛 SecurityException，
  * 已在 register() 内就地拦截（功能静默不生效）。
  *
- * 【2026-09-20 修复 P0 崩溃】必须显式传主线程 Looper。
+ * 【2026-09-20 修复 P0 崩溃】必须把回调调度到主线程。
  *
- * `PhoneStateListener()` 无参构造内部会 `new Handler()`（PhoneStateListener.java:548/578），
+ * 无参的 `PhoneStateListener()` 构造内部会 `new Handler()`（PhoneStateListener.java:548/578），
  * 而无参 `Handler()` 要求当前线程已 `Looper.prepare()`。调用方
  * `WatchReceiverService.syncCallPauseListener()` 在 `Dispatchers.IO` 协程里 new 本类，
  * IO 线程池没有 Looper → `Looper.myLooper()` 为 null → NPE：
@@ -48,10 +48,14 @@ import kotlinx.coroutines.tasks.await
  * START_STICKY 重建都会重新 new 一次 → 崩 → 重建 → 再崩，形成「划掉 App 后
  * 永久闪退 / 屡次停止运行」的死循环。
  *
- * 传入 `Looper.getMainLooper()` 既修复崩溃，也保证 `onCallStateChanged`
+ * 修法：走 `PhoneStateListener(Executor)` 重载，传主线程 Executor。
+ * 注意该重载的形参是 `Executor` 而**不是 `Looper`** —— 传 Looper 会编译不过
+ * （Argument type mismatch: 'android.os.Looper!' but 'java.util.concurrent.Executor' expected）。
+ * 这样既绕开了无参构造的 `new Handler()`，也保证 `onCallStateChanged`
  * 回调在主线程执行（符合 SDK 预期）。
  */
-class CallStateListener(context: Context) : PhoneStateListener(Looper.getMainLooper()) {
+class CallStateListener(context: Context) :
+    PhoneStateListener(ContextCompat.getMainExecutor(context)) {
 
     private val app = context.applicationContext
     private val telephony = app.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
