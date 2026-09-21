@@ -94,6 +94,28 @@ class AudioCaptureService : Service() {
     private lateinit var prefs: SharedPreferences
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wakeLockHeld = false
+
+    private fun acquireWakeLock() {
+        if (wakeLockHeld) return
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "omi4wos:audio_capture"
+        ).apply { acquire() }
+        wakeLockHeld = true
+        Log.d(TAG, "WakeLock acquired")
+    }
+
+    private fun releaseWakeLock() {
+        if (!wakeLockHeld) return
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
+        wakeLock = null
+        wakeLockHeld = false
+        Log.d(TAG, "WakeLock released")
+    }
 
     // Speech segment tracking
     private var speechStartTimeMs: Long = 0L
@@ -188,14 +210,9 @@ class AudioCaptureService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         )
 
-        // Acquire wake lock
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "omi4wos:audio_capture"
-        ).apply { acquire() }
-
-        // Start audio recording
+        // Start audio recording without holding a wake lock.
+        // The lock is acquired only during speech/sync so the CPU can sleep
+        // during extended silence to save power.
         audioRecorder.start { samples ->
             circularBuffer.write(samples)
         }
@@ -210,6 +227,7 @@ class AudioCaptureService : Service() {
         // per-segment realtimeSyncJob might have missed (e.g. after a BT reconnect).
         serviceScope.launch {
             while (isActive) {
+                acquireWakeLock()
                 dataLayerSender.checkConnectivity()
                 val connected = dataLayerSender.isConnected
 
@@ -222,6 +240,7 @@ class AudioCaptureService : Service() {
                         prefs.edit().putLong(Constants.PREF_LAST_SYNC_TIME, lastSyncTimeMs).apply()
                     }
                 }
+                releaseWakeLock()
                 delay(Constants.CONNECTIVITY_POLL_INTERVAL_MS)
             }
         }
@@ -448,6 +467,7 @@ class AudioCaptureService : Service() {
                 lastValidSpeechEndTimeMs = System.currentTimeMillis()
             } else {
                 Log.d(TAG, "Speech segment too short, discarding: ${duration}ms < ${currentMinDuration}ms")
+                releaseWakeLock()
             }
             speechClassifier.resetState()
         }
@@ -486,6 +506,8 @@ class AudioCaptureService : Service() {
 
         dataLayerSender.sendControlMessage(DataLayerPaths.CMD_SYNC_END, mapOf(DataLayerPaths.KEY_SYNC_ID to syncId))
         Log.i(TAG, "Sync end: $syncId")
+
+        releaseWakeLock()
     }
 
     private suspend fun syncPendingChunks() {
@@ -616,3 +638,4 @@ class AudioCaptureService : Service() {
         super.onDestroy()
     }
 }
+
