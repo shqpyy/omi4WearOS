@@ -77,6 +77,10 @@ fun SettingsScreen(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
         if (uri != null) {
+            // 面包屑：万一后续崩溃，能知道用户当时刚操作过「选目录」
+            com.omi4wos.mobile.service.CrashLogger.markStep(
+                context, "已选择通话录音目录: $uri"
+            )
             // 保持持久授权
             try {
                 context.contentResolver.takePersistableUriPermission(

@@ -39,8 +39,11 @@ data class HomeUiState(
     val storageMethod: OmiConfig.StorageMethod = OmiConfig.StorageMethod.LOCAL_FILE,
     val location: LocationUploadStatus = LocationUploadStatus(),
     val lastCrash: String? = null,
-    /** 日志文件占用（人类可读），展示在 About 页日志卡片。 */
-    val logSize: String = "-"
+    val logSize: String = "-",
+
+    /** 重试状态 */
+    val isRetrying: Boolean = false,
+    val retryResult: String? = null
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -67,25 +70,32 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<HomeUiState> = _uiState
 
     init {
-        messageClient.addListener(messageListener)
-        observeState()
-        queryWatchRecordingState()
-        retryPendingUploads()
-        // 读取存储方式, 用于首页"已上传到…"的动态文案
-        viewModelScope.launch {
-            val method = OmiConfig(getApplication()).getConfig().storageMethod
-            _uiState.value = _uiState.value.copy(storageMethod = method)
-        }
-        // 定位上报状态 (权限/最近成败/坐标)
-        viewModelScope.launch {
-            LocationStatus.status.collect { status ->
-                _uiState.value = _uiState.value.copy(location = status)
+        try {
+            messageClient.addListener(messageListener)
+            observeState()
+            queryWatchRecordingState()
+            // retryPendingUploads() 不再自动调用，只在用户点按钮时触发
+            // 读取存储方式, 用于首页"已上传到…"的动态文案
+            viewModelScope.launch {
+                val method = OmiConfig(getApplication()).getConfig().storageMethod
+                _uiState.value = _uiState.value.copy(storageMethod = method)
             }
+            // 定位上报状态 (权限/最近成败/坐标)
+            viewModelScope.launch {
+                LocationStatus.status.collect { status ->
+                    _uiState.value = _uiState.value.copy(location = status)
+                }
+            }
+            viewModelScope.launch { LocationUploader.refreshStatus(getApplication()) }
+            // 上次崩溃的堆栈(如果有), 直接摆在首页便于远程排错
+            _uiState.value = _uiState.value.copy(lastCrash = CrashLogger.last(getApplication()))
+            refreshLogInfo()
+        } catch (e: Throwable) {
+            AppLog.e("HomeViewModel", "init failed", e)
+            CrashLogger.install(getApplication())
+            CrashLogger.markStep(getApplication(), "ViewModel init crash")
+            _uiState.value = _uiState.value.copy(lastCrash = "ViewModel init: ${e.message}")
         }
-        viewModelScope.launch { LocationUploader.refreshStatus(getApplication()) }
-        // 上次崩溃的堆栈(如果有), 直接摆在首页便于远程排错
-        _uiState.value = _uiState.value.copy(lastCrash = CrashLogger.last(getApplication()))
-        refreshLogInfo()
     }
 
     /** 刷新日志体积，展示在首页「应用日志」卡片。 */
@@ -169,7 +179,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun retryPendingUploads() {
         viewModelScope.launch {
-            runUploadRetry(getApplication())
+            _uiState.value = _uiState.value.copy(isRetrying = true, retryResult = null)
+            try {
+                val result = runUploadRetry(getApplication()) { msg ->
+                    _uiState.value = _uiState.value.copy(retryResult = msg)
+                }
+                _uiState.value = _uiState.value.copy(
+                    isRetrying = false,
+                    retryResult = result.message
+                )
+                // 成功后延迟清掉提示，让用户看到"Succeeded"
+                if (result.anySucceeded) {
+                    delay(2_000)
+                    _uiState.value = _uiState.value.copy(retryResult = null)
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isRetrying = false,
+                    retryResult = "Retry failed: ${e.message}"
+                )
+            }
         }
     }
 

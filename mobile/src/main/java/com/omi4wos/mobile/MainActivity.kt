@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
+import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.app.ActivityCompat
@@ -41,9 +42,14 @@ class MainActivity : ComponentActivity() {
      * API 33+ 会自动 recreate；API < 33 下次启动时这里会应用新语言。
      */
     override fun attachBaseContext(newBase: android.content.Context) {
+        // 注意：这里绝不能 runBlocking 阻塞主线程读 DataStore。
+        // attachBaseContext 是 Activity 生命周期最早阶段（早于 onCreate），
+        // 一旦 DataStore 有残留文件锁，主线程就会死锁 → ANR / 连续崩溃，
+        // 而且此时 showFatalError 兜底还没机会安装，用户只能看到闪退。
+        // 因此改为顺序读先前落盘的轻量镜像文件（同步 I/O，微秒级，无挂起风险）。
         val lang = try {
-            runBlocking { OmiConfig(newBase).getConfig().language }
-        } catch (_: Exception) { OmiConfig.DEFAULT_LANGUAGE }
+            OmiConfig.readLanguageSync(newBase)
+        } catch (t: Throwable) { OmiConfig.DEFAULT_LANGUAGE }
 
         val wrapped = if (lang != "system") {
             val locale = Locale.forLanguageTag(lang)
@@ -57,21 +63,114 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        // 最早时机安装日志 + 崩溃记录器: 崩溃堆栈落盘, 下次打开在首页可见/可导出
+        try {
+            super.onCreate(savedInstanceState)
+        } catch (e: Throwable) {
+            // 恢复态崩兜底：先装日志，记一步，再抛，保证下次能进来看日志
+            runCatching { AppLog.install(this) }
+            runCatching { CrashLogger.install(this) }
+            AppLog.e("MainActivity", "super.onCreate failed", e)
+            CrashLogger.markStep(this, "MainActivity.onCreate restore crash")
+            showFatalError(e)
+            return
+        }
+
+        // 最早时机安装日志 + 崩溃记录器
         AppLog.install(this)
         CrashLogger.install(this)
-        // Start the persistent foreground service that receives watch messages
-        ContextCompat.startForegroundService(
-            this, Intent(this, WatchReceiverService::class.java)
-        )
-        scheduleUploadRetry()
-        requestBatteryOptimizationExemption()
-        maybeRequestLocationPermission()
-        maybeRequestPhoneStatePermission()
-        setContent {
-            MobileApp()
+
+        try {
+            // Start the persistent foreground service that receives watch messages
+            ContextCompat.startForegroundService(
+                this, Intent(this, WatchReceiverService::class.java)
+            )
+            scheduleUploadRetry()
+            requestBatteryOptimizationExemption()
+            maybeRequestLocationPermission()
+            maybeRequestPhoneStatePermission()
+            setContent {
+                MobileApp()
+            }
+        } catch (e: Throwable) {
+            // 初始化阶段兜底：任何后续步骤崩，都先记日志，然后显示错误页而不是直接闪退
+            AppLog.e("MainActivity", "init failed", e)
+            CrashLogger.markStep(this, "MainActivity.init crash")
+            showFatalError(e)
         }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+        val label = if (requestCode == LOCATION_PERMISSION_CODE) {"定位"} else if (requestCode == PHONE_STATE_PERMISSION_CODE) {"电话"} else {"其他"}
+        AppLog.i("MainActivity", "权限回调: $label 授权=$granted")
+        // 授权后显式刷新一次状态，避免隐式重建导致的状态不一致
+        if (granted) {
+            AppLog.i("MainActivity", "权限已授予，刷新相关状态")
+        }
+    }
+
+    /**
+     * 显示纯文本错误页，保证用户即使 UI 崩了也能进来看日志导出。
+     *
+     * 关键：这个页面**不用 Compose**，只用原生 View —— 因为崩溃很可能就发生在
+     * Compose 初始化阶段，用 Compose 兜底等于没兜。
+     *
+     * 按钮作用：
+     * - 「导出错误信息」：把堆栈发出来（闪退时进不去设置页，只能从这里拿）
+     * - 「清空配置并重试」：一键复位 DataStore，避免坏配置导致永远进不去
+     */
+    private fun showFatalError(e: Throwable) {
+        val detail = buildString {
+            append("App 启动失败\n\n")
+            append("${e.javaClass.name}: ${e.message ?: ""}\n\n")
+            e.stackTrace.take(20).forEach { append("  at $it\n") }
+            append("\n最近一步: ${runCatching { CrashLogger.lastStep(this@MainActivity) }.getOrNull() ?: "?"}\n")
+            append("\n如果反复出现，请点「清空配置并重试」。")
+        }
+
+        val scroll = android.widget.ScrollView(this).apply {
+            setPadding(48, 48, 48, 48)
+            addView(android.widget.TextView(this@MainActivity).apply {
+                text = detail
+                textSize = 14f
+                setTextColor(0xFFB71C1C.toInt())
+                setTextIsSelectable(true)
+            })
+        }
+
+        val exportBtn = android.widget.Button(this).apply {
+            text = "导出错误信息"
+            setOnClickListener {
+                runCatching { AppLog.shareAsText(this@MainActivity, "omi4wOS 启动失败", detail) }
+            }
+        }
+        val resetBtn = android.widget.Button(this).apply {
+            text = "清空配置并重试"
+            setOnClickListener {
+                runCatching {
+                    kotlinx.coroutines.runBlocking { OmiConfig(this@MainActivity).clearConfig() }
+                }
+                android.widget.Toast.makeText(
+                    this@MainActivity, "配置已清空，请重新打开 App", android.widget.Toast.LENGTH_LONG
+                ).show()
+                finish()
+            }
+        }
+
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            addView(scroll, android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(android.widget.LinearLayout(this@MainActivity).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                addView(exportBtn)
+                addView(resetBtn)
+            })
+        }
+        setContentView(layout)
     }
 
     /**
@@ -79,11 +178,13 @@ class MainActivity : ComponentActivity() {
      * 若用户拒绝, LocationUploader 会自动跳过采样, 后续可在系统设置重新授权。
      */
     private fun maybeRequestLocationPermission() {
-        val needed = arrayOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-
+        val needed = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
         if (needed.isNotEmpty()) {
             Log.i(TAG, "Requesting location permission for periodic upload")
             AppLog.i(TAG, "请求定位权限: ${needed.joinToString()}")

@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -17,6 +18,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.Wearable
+import com.omi4wos.mobile.CrashLogActivity
 import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.shared.Constants
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +40,9 @@ class WatchReceiverService : Service() {
     companion object {
         private const val TAG = "WatchReceiverService"
         private const val NOTIFICATION_ID = 1003
+
+        /** 「导出冲突日志」动作按钮的 PendingIntent requestCode。 */
+        private const val REQUEST_EXPORT_LOG = 7301
     }
 
     private lateinit var messageClient: MessageClient
@@ -94,20 +99,34 @@ class WatchReceiverService : Service() {
     /**
      * 按配置同步通话暂停监听：开启且已授予 READ_PHONE_STATE 则注册，否则注销。
      * 默认开启（callPause.enabled 默认 true）；无权限时静默不生效。
+     *
+     * 【2026-09-20 修复 P0】整段包 runCatching。本方法跑在 Dispatchers.IO，
+     * 而 CallStateListener 的父类构造在旧版会因缺少 Looper 抛 NPE；
+     * 该 NPE 以前经协程作用域冒泡成未捕获异常 → 进程崩溃 → START_STICKY 重建 →
+     * 再次进入本方法 → 再崩，形成永久闪退。父类构造器已修为传主线程 Looper，
+     * 这里再加一层保险：任何构造/注册异常都不得掀翻服务进程。
+     *
+     * 注：用 SupervisorJob 的 scope 不保证捕获 —— launch 内的异常若未被捕获
+     * 会走 CoroutineExceptionHandler → 默认处理器 → 进程崩溃。所以必须就地捕获。
      */
     private fun syncCallPauseListener() {
         serviceScope.launch {
-            val cfg = runCatching { OmiConfig(applicationContext).getConfig() }.getOrNull()
-            val enabled = cfg?.callPause?.enabled != false
-            val hasPerm = ContextCompat.checkSelfPermission(
-                applicationContext, Manifest.permission.READ_PHONE_STATE
-            ) == PackageManager.PERMISSION_GRANTED
-            if (enabled && hasPerm) {
-                if (callStateListener == null) {
-                    callStateListener = CallStateListener(applicationContext).also { it.register() }
+            runCatching {
+                val cfg = runCatching { OmiConfig(applicationContext).getConfig() }.getOrNull()
+                val enabled = cfg?.callPause?.enabled != false
+                val hasPerm = ContextCompat.checkSelfPermission(
+                    applicationContext, Manifest.permission.READ_PHONE_STATE
+                ) == PackageManager.PERMISSION_GRANTED
+                if (enabled && hasPerm) {
+                    if (callStateListener == null) {
+                        callStateListener = CallStateListener(applicationContext).also { it.register() }
+                    }
+                } else {
+                    callStateListener?.unregister()
+                    callStateListener = null
                 }
-            } else {
-                callStateListener?.unregister()
+            }.onFailure { err ->
+                AppLog.e(TAG, "同步通话监听失败（已忽略，不影响服务）", err)
                 callStateListener = null
             }
         }
@@ -126,25 +145,45 @@ class WatchReceiverService : Service() {
      */
     private fun startOrRefreshForeground() {
         val notification = createNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            if (LocationUploader.hasLocationPermission(this)) {
-                types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                if (LocationUploader.hasLocationPermission(this)) {
+                    types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                }
+                try {
+                    startForeground(NOTIFICATION_ID, notification, types)
+                } catch (e: Exception) {
+                    Log.w(TAG, "startForeground with type $types failed, retrying dataSync only", e)
+                    AppLog.w(TAG, "前台服务类型 $types 启动失败，回落 dataSync", e)
+                    startForeground(NOTIFICATION_ID, notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                }
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
             }
-            try {
-                startForeground(NOTIFICATION_ID, notification, types)
-            } catch (e: Exception) {
-                Log.w(TAG, "startForeground with type $types failed, retrying dataSync only", e)
-                AppLog.w(TAG, "前台服务类型 $types 启动失败，回落 dataSync", e)
-                startForeground(NOTIFICATION_ID, notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            }
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        } catch (t: Throwable) {
+            // 【2026-09-20】最外层兜底：本服务由 START_STICKY 托管，一旦在此抛出异常
+            // （典型：Android 14+ foregroundServiceType 对应权限缺失 → SecurityException），
+            // 进程会崩溃 → 系统立刻重建 → 再崩，形成「划掉 App 后永久闪退 / 屡次停止运行」。
+            // 这里宁可暂时没有前台通知，也不能让进程崩掉。
+            Log.e(TAG, "startForeground failed; service continues without foreground", t)
+            AppLog.e(TAG, "前台服务启动失败（已降级为普通服务，避免崩溃循环）", t)
         }
     }
 
     private fun createNotification(): Notification {
+        // 【2026-09-20】加一个「导出冲突日志」动作按钮。
+        // 原因：进程级启动崩溃时用户根本进不去 App，之前的导出入口（首页卡片、
+        // 错误页按钮）全部失效。而常驻通知由**服务**发出，服务一旦活着就有点 ——
+        // 用户下拉通知栏就能把日志导出来发给我。
+        val exportIntent = CrashLogActivity.intent(this, exportOnly = true)
+        val exportPending = PendingIntent.getActivity(
+            this,
+            REQUEST_EXPORT_LOG,
+            exportIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         return NotificationCompat.Builder(this, Constants.MOBILE_NOTIFICATION_CHANNEL_ID)
             .setContentTitle("omi4wOS")
             .setContentText("Listening for watch audio…")
@@ -153,6 +192,7 @@ class WatchReceiverService : Service() {
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .addAction(0, "导出冲突日志", exportPending)
             .build()
     }
 
@@ -176,5 +216,20 @@ class WatchReceiverService : Service() {
         Log.i(TAG, "Watch message listener unregistered")
         AppLog.i(TAG, "onDestroy: 注销手表消息监听")
         super.onDestroy()
+    }
+
+    /**
+     * 【2026-09-20】用户在最近任务里划掉 App 时会回调这里。
+     *
+     * 本服务是 START_STICKY 的常驻服务（靠它收手表音频），划掉任务后继续运行
+     * 是预期行为；这里只记一笔面包屑，方便下次进来在首页看到最后一步。
+     * 全部包 runCatching：onTaskRemoved 里抛异常会直接带崩整个进程。
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        runCatching {
+            AppLog.i(TAG, "onTaskRemoved: 用户划掉了最近任务，保持常驻服务运行")
+            CrashLogger.markStep(applicationContext, "WatchReceiver: onTaskRemoved")
+        }
+        super.onTaskRemoved(rootIntent)
     }
 }

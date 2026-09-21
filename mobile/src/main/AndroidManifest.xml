@@ -35,6 +35,7 @@
         android:maxSdkVersion="32" />
 
     <application
+        android:name=".OmiApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -51,6 +52,23 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Crash log viewer/exporter — 独立于 MainActivity，崩溃时也能打开 -->
+        <activity
+            android:name=".CrashLogActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="omi4wos"
+                    android:host="crashlog" />
             </intent-filter>
         </activity>
 
