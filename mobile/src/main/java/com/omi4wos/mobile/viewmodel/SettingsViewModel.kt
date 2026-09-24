@@ -101,6 +101,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 locationEnabled = config.location.enabled,
                 locationIntervalMin = config.location.intervalMin,
                 callPauseEnabled = config.callPause.enabled,
+                inputTextEnabled = config.inputText.enabled,
+                inputTextUploadEnabled = config.inputText.uploadEnabled,
                 language = config.language
             )
         }
