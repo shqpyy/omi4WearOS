@@ -41,6 +41,19 @@ interface StorageUploader {
     ): Boolean
 
     /**
+     * 上传一条输入文本事件（JSONL 单行）。
+     *
+     * 与 [upload] 的差异：
+     * - 音频走 multipart/form-data，文本走 application/json
+     * - 文本上传只在选择 HTTP 后端时真正联网；其他后端（本地/S3）落盘留档即可
+     *
+     * @param jsonLine  一行 JSON 文本（[com.omi4wos.mobile.service.InputTextEvent.toJsonLine]）
+     * @param fileName  来源文件名（如 input_text_events_2026-09-24.jsonl），用于服务端归组
+     * @return 上传成功 true / 失败 false
+     */
+    suspend fun uploadInputText(jsonLine: String, fileName: String): Boolean
+
+    /**
      * 测试连通性（仅用于 Settings 页 Test 按钮）。
      * @return Pair(success, message)
      */

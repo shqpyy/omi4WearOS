@@ -6,6 +6,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.omi4wos.mobile.omi.OmiConfig
+import com.omi4wos.mobile.service.InputTextUploadWorker
 import com.omi4wos.mobile.service.LocationUploader
 import com.omi4wos.mobile.service.PhoneRecordingWatcherService
 import com.omi4wos.mobile.service.RecordingWatcherWorker
@@ -53,6 +54,10 @@ data class SettingsUiState(
 
     // 通话时暂停手表录音
     val callPauseEnabled: Boolean = true,
+
+    // 输入文本采集
+    val inputTextEnabled: Boolean = false,
+    val inputTextUploadEnabled: Boolean = false,
 
     // 语言（system / en / zh-CN）
     val language: String = OmiConfig.DEFAULT_LANGUAGE,
@@ -228,6 +233,40 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    // ---- 输入文本采集 ----
+    // 拨动即保存; 采集开关控制无障碍服务采集, 上传开关控制 Worker 周期上传
+    fun updateInputTextEnabled(value: Boolean) {
+        _uiState.value = _uiState.value.copy(inputTextEnabled = value)
+        viewModelScope.launch {
+            val current = omiConfig.getConfig()
+            omiConfig.saveConfig(
+                current.copy(inputText = current.inputText.copy(enabled = value))
+            )
+            val context = getApplication<Application>()
+            if (value && _uiState.value.inputTextUploadEnabled) {
+                InputTextUploadWorker.schedule(context)
+            } else {
+                InputTextUploadWorker.cancel(context)
+            }
+        }
+    }
+
+    fun updateInputTextUploadEnabled(value: Boolean) {
+        _uiState.value = _uiState.value.copy(inputTextUploadEnabled = value)
+        viewModelScope.launch {
+            val current = omiConfig.getConfig()
+            omiConfig.saveConfig(
+                current.copy(inputText = current.inputText.copy(uploadEnabled = value))
+            )
+            val context = getApplication<Application>()
+            if (value && _uiState.value.inputTextEnabled) {
+                InputTextUploadWorker.schedule(context)
+            } else {
+                InputTextUploadWorker.cancel(context)
+            }
+        }
+    }
+
     // ---- 保存 ----
     fun saveSettings() {
         viewModelScope.launch {
@@ -262,6 +301,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         ),
                         callPause = OmiConfig.CallPauseConfig(
                             enabled = state.callPauseEnabled
+                        ),
+                        inputText = OmiConfig.InputTextConfig(
+                            enabled = state.inputTextEnabled,
+                            uploadEnabled = state.inputTextUploadEnabled
                         ),
                         language = state.language
                     )

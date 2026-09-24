@@ -22,6 +22,7 @@ import androidx.work.WorkManager
 import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.mobile.service.AppLog
 import com.omi4wos.mobile.service.CrashLogger
+import com.omi4wos.mobile.service.InputTextUploadWorker
 import com.omi4wos.mobile.service.UploadRetryWorker
 import com.omi4wos.mobile.service.WatchReceiverService
 import com.omi4wos.mobile.ui.MobileApp
@@ -85,6 +86,7 @@ class MainActivity : ComponentActivity() {
                 this, Intent(this, WatchReceiverService::class.java)
             )
             scheduleUploadRetry()
+            scheduleInputTextUpload()
             requestBatteryOptimizationExemption()
             maybeRequestLocationPermission()
             maybeRequestPhoneStatePermission()
@@ -223,6 +225,15 @@ class MainActivity : ComponentActivity() {
         )
         Log.i(TAG, "Upload retry worker scheduled (15 min, network-constrained)")
         AppLog.i(TAG, "启动完成: 前台服务已拉起, 重试 Worker 已排程")
+    }
+
+    /**
+     * 输入文本上传 worker：与音频重试同构，但仅在用户开启采集+上传时才有意义。
+     * 这里无条件排程（KEEP 策略，幂等），worker 内部会自查开关再决定是否干活，
+     * 避免设置页未打开时也要跟 MainActivity 状态同步。
+     */
+    private fun scheduleInputTextUpload() {
+        InputTextUploadWorker.schedule(this)
     }
 
     /**

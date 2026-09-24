@@ -179,6 +179,69 @@ class HttpUploader(
     }
 
     /**
+     * 上传一条输入文本事件。
+     *
+     * POST application/json 到 uploadUrl 派生出的 /input-text 端点，
+     * 例如 uploadUrl = http://host:8081/upload-audio → http://host:8081/input-text。
+     *
+     * body 形如：
+     *   { "file_name": "input_text_events_2026-09-24.jsonl", "line": "{...}" }
+     */
+    override suspend fun uploadInputText(jsonLine: String, fileName: String): Boolean =
+        withContext(Dispatchers.IO) {
+            if (!config.isConfigured) {
+                Log.w(TAG, "uploadUrl not configured — skip input text upload")
+                return@withContext false
+            }
+            val url = inputTextEndpoint() ?: run {
+                Log.w(TAG, "Cannot derive /input-text endpoint from ${config.uploadUrl}")
+                return@withContext false
+            }
+            try {
+                val json = JSONObject()
+                    .put("file_name", fileName)
+                    .put("line", jsonLine)
+                val body = json.toString()
+                    .toRequestBody("application/json; charset=utf-8".toMediaType())
+
+                val requestBuilder = Request.Builder()
+                    .url(url)
+                    .post(body)
+                if (config.uploadApiKey.isNotBlank()) {
+                    requestBuilder.header("X-API-Key", config.uploadApiKey)
+                }
+                val request = requestBuilder.build()
+
+                val response = client.newCall(request).execute()
+                val status = response.code
+                val respBody = response.body?.string()
+                response.close()
+                if (status in 200..299) {
+                    Log.i(TAG, "Input text uploaded ($status, ${jsonLine.length} chars) from $fileName")
+                    true
+                } else {
+                    Log.w(TAG, "Input text upload failed ($status): $respBody")
+                    false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Input text upload exception", e)
+                false
+            }
+        }
+
+    /** 从 uploadUrl 派生 /input-text 端点；无法解析时返回 null。 */
+    private fun inputTextEndpoint(): String? {
+        return try {
+            val base = android.net.Uri.parse(config.uploadUrl)
+            if (base?.host.isNullOrBlank()) return null
+            val port = if (base.port > 0) ":${base.port}" else ""
+            "${base.scheme}://${base.host}$port/input-text"
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
      * 上传一条定位点（网络定位为主）。POST JSON 到 uploadUrl 派生出的 /location 端点,
      * 例如 uploadUrl = http://host:8081/upload → http://host:8081/location。
      *

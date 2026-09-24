@@ -119,4 +119,16 @@
     <string name='home_log_empty'>暂无日志</string>
     <string name='home_log_copied'>日志已复制到剪贴板</string>
     <string name='home_log_share_subject'>omi4wOS 应用日志</string>
+
+    <string name='input_text_title'>输入文本采集</string>
+    <string name='input_text_desc'>采集你在其他 App 里输入的文本（自动跳过密码框），随录音一同归档。</string>
+    <string name='input_text_enable'>启用文本采集</string>
+    <string name='input_text_upload'>自动上传到服务器</string>
+    <string name='input_text_grant'>去开启无障碍权限</string>
+    <string name='input_text_status_on'>服务已启用</string>
+    <string name='input_text_status_off'>服务未启用 —— 请授予无障碍权限</string>
+    <string name='input_text_pending'>待上传：%1$s</string>
+    <string name='input_text_upload_now'>立即上传</string>
+    <string name='input_text_accessibility_summary'>为 omi4wOS 采集输入文本</string>
+    <string name='input_text_accessibility_description'>采集你在其他 App 中输入的文本并保存到本地，自动跳过密码框。仅在你开启后才会自动上传。</string>
 </resources>

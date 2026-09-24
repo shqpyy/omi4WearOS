@@ -76,6 +76,14 @@ class OmiConfig(private val context: Context) {
     data class CallPauseConfig(
         val enabled: Boolean = true     // 开关, 默认开
     )
+
+    /** 输入文本采集配置 */
+    data class InputTextConfig(
+        /** 启用采集（无障碍服务），默认关 —— 敏感功能，用户手动开启 */
+        val enabled: Boolean = false,
+        /** 自动上传到服务器，默认关 —— 不开则只落本地 JSONL */
+        val uploadEnabled: Boolean = false
+    )
     /** 顶层配置聚合 */
     data class Config(
         val storageMethod: StorageMethod = StorageMethod.LOCAL_FILE,
@@ -85,6 +93,7 @@ class OmiConfig(private val context: Context) {
         val phoneWatcher: PhoneWatcherConfig = PhoneWatcherConfig(),
         val location: LocationConfig = LocationConfig(),
         val callPause: CallPauseConfig = CallPauseConfig(),
+        val inputText: InputTextConfig = InputTextConfig(),
         val language: String = DEFAULT_LANGUAGE
     )
 
@@ -125,6 +134,10 @@ class OmiConfig(private val context: Context) {
 
         // Call pause (通话时暂停手表录音)
         private val KEY_CALL_PAUSE_ENABLED = booleanPreferencesKey("call_pause_enabled")
+
+        // Input text collect
+        private val KEY_INPUT_TEXT_ENABLED = booleanPreferencesKey("input_text_enabled")
+        private val KEY_INPUT_TEXT_UPLOAD_ENABLED = booleanPreferencesKey("input_text_upload_enabled")
 
         // Language
         private val KEY_LANGUAGE = stringPreferencesKey("language")
@@ -197,6 +210,10 @@ class OmiConfig(private val context: Context) {
                 callPause = CallPauseConfig(
                     enabled = prefs[KEY_CALL_PAUSE_ENABLED] ?: true
                 ),
+                inputText = InputTextConfig(
+                    enabled = prefs[KEY_INPUT_TEXT_ENABLED] ?: false,
+                    uploadEnabled = prefs[KEY_INPUT_TEXT_UPLOAD_ENABLED] ?: false
+                ),
                 language = prefs[KEY_LANGUAGE] ?: DEFAULT_LANGUAGE
             )
         }.first()
@@ -221,6 +238,8 @@ class OmiConfig(private val context: Context) {
             prefs[KEY_LOC_ENABLED] = config.location.enabled
             prefs[KEY_LOC_INTERVAL] = config.location.intervalMin
             prefs[KEY_CALL_PAUSE_ENABLED] = config.callPause.enabled
+            prefs[KEY_INPUT_TEXT_ENABLED] = config.inputText.enabled
+            prefs[KEY_INPUT_TEXT_UPLOAD_ENABLED] = config.inputText.uploadEnabled
             prefs[KEY_LANGUAGE] = config.language
         }
         // 同步落一份语言镜像，供下次 attachBaseContext 无阻塞读取。
