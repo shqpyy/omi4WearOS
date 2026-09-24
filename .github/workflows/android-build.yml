@@ -2,6 +2,8 @@ name: Android Build
 
 on:
   push:
+    branches: [ main, 'feature/**' ]
+  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
@@ -24,11 +26,21 @@ jobs:
 
       - name: Setup Android SDK
         run: |
-          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          # ubuntu-latest 镜像已预装 Android SDK, 路径由环境变量给出, 不再硬编码
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK_ROOT" ]; then
+            echo "Android SDK not found at $SDK_ROOT" >&2
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> $GITHUB_ENV
+          CMDLINE_TOOLS="$SDK_ROOT/cmdline-tools/latest/bin"
+          if [ -d "$CMDLINE_TOOLS" ]; then
+            echo "$CMDLINE_TOOLS" >> $GITHUB_PATH
+            yes | "$CMDLINE_TOOLS/sdkmanager" --licenses > /dev/null 2>&1 || true
+            "$CMDLINE_TOOLS/sdkmanager" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
+          fi
+          echo "Using Android SDK at: $SDK_ROOT"
 
       - name: Grant execute permission
         run: chmod +x gradlew
