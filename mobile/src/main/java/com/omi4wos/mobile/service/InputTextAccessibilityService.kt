@@ -2,7 +2,6 @@ package com.omi4wos.mobile.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
-import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
@@ -11,10 +10,11 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.omi4wos.mobile.omi.OmiConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 输入文本采集（无障碍服务）。
@@ -23,10 +23,27 @@ import java.util.concurrent.atomic.AtomicLong
  * 经 [InputTextRepository] 落到本地 JSONL；是否自动上传由
  * [OmiConfig.InputTextConfig.uploadEnabled] 决定（默认关）。
  *
+ * ## 为什么需要「静默合并」而不是逐事件落盘
+ *
+ * 该事件携带的是输入框的**当前完整内容**（全量快照），不是增量。中文输入法
+ * 的拼音过程会连续触发：`w` → `wo` → `woai` → `woaini` → `我爱你`，删除回退
+ * 同样会触发。若逐条落盘，一句「我爱你」会被拆成十几二十条碎片，且纯拼音的
+ * 中间态（`woai`）与用户的真实意图无关。
+ *
+ * 因此本服务采用 **pending 缓冲 + 静默冲刷**：
+ * - 同一输入框（包名 + windowId + viewId）的连续变更只更新一条 pending，不落盘；
+ * - 每次变更重置静默计时器，[QUIET_MS] 毫秒内无新事件才认为这段输入结束；
+ * - 冲刷时只写入**最终态**文本，中间态与已删除内容一律不落盘。
+ *
+ * 额外规则：
+ * - 输入框被清空（发送后 / 手动清空）→ 立即冲刷，避免把相邻两条消息并成一条；
+ * - 长度过滤（[MIN_TEXT_LENGTH]）放在**冲刷时**而非捕获时，中间态不参与过滤；
+ * - 服务中断 / 销毁时冲刷全部 pending，避免丢最后一段。
+ *
  * 隐私处理：
  * - 跳过 password 输入框（[AccessibilityNodeInfo.isPassword]）
  * - 跳过自身包名，避免采集自家界面
- * - 跳过纯空白 / 过短文本
+ * - 跳过纯空白文本
  *
  * ⚠️ 只在设置页开关打开时才应处于启用状态；系统侧由用户在
  * 「设置 → 无障碍」里手动授权，两者都满足才会收到事件。
@@ -36,11 +53,18 @@ class InputTextAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "InputTextA11y"
 
-        /** 最短采集长度：过短的多为单字误触/联想，噪声大 */
-        private const val MIN_TEXT_LENGTH = 2
+        /**
+         * 静默窗口（ms）：最后一次文本变更后多久没有新事件，才判定这段输入结束。
+         *
+         * 取值依据（2026-09-25 真机数据，747 条快照 / 738 个同 App 相邻间隔）：
+         * 相邻间隔 p50 = 1.02s、p75 = 1.38s，2.0s 有约 2 倍安全边际，
+         * 同时把碎片数压到 ~1/6（747 → 约 124 段）。
+         * 调大 → 更少段、但可能把两句话并成一条；调小 → 反之。
+         */
+        private const val QUIET_MS = 2000L
 
-        /** 同一 App 内两次采集的最小间隔，防抖（打字会高频触发） */
-        private const val DEBOUNCE_MS = 800L
+        /** 最短落盘长度：过短的多为单字误触/联想，噪声大（在冲刷时判定） */
+        private const val MIN_TEXT_LENGTH = 2
 
         /** 单条文本长度上限，超长多为粘贴大段内容，截断保护 */
         private const val MAX_TEXT_LENGTH = 2000
@@ -51,9 +75,35 @@ class InputTextAccessibilityService : AccessibilityService() {
             private set
     }
 
+    /**
+     * 一段正在编辑中的输入。
+     *
+     * @param packageName 采集来源包名（同一 pending 内不变）
+     * @param text        该输入框的最新全量文本（会被反复覆盖）
+     * @param timestampMs 最近一次变更时间，作为落盘记录的时间戳
+     */
+    private data class PendingCapture(
+        val packageName: String,
+        var text: String,
+        var timestampMs: Long,
+        var eventCount: Int
+    )
+
+    /** 静默计时器作用域；随服务销毁取消 */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val lastCaptureAt = AtomicLong(0L)
+
+    /**
+     * 落盘作用域。**刻意不随服务销毁取消**：onDestroy 里要冲刷最后一段，
+     * 若与计时器共用 scope，cancel() 会把正在进行的写入一起掐掉。
+     */
+    private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val repository by lazy { InputTextRepository.getInstance(applicationContext) }
+
+    /** pending 与计时器的读写锁。事件回调在服务主线程，写入在 IO 线程，需互斥 */
+    private val lock = Any()
+    private val pending = HashMap<String, PendingCapture>()
+    private val flushJobs = HashMap<String, Job>()
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -75,7 +125,6 @@ class InputTextAccessibilityService : AccessibilityService() {
         val ev = event ?: return
         if (ev.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) return
 
-        val text = extractText(ev) ?: return
         val pkg = ev.packageName?.toString().orEmpty()
         if (pkg.isEmpty()) return
 
@@ -88,52 +137,128 @@ class InputTextAccessibilityService : AccessibilityService() {
             return
         }
 
-        val trimmed = text.trim()
-        if (trimmed.length < MIN_TEXT_LENGTH) return
+        val key = buildFieldKey(ev, pkg)
+        val raw = extractText(ev).orEmpty()
 
-        // 防抖：打字时每敲一个键都触发，只取停顿后的一次
+        // 输入框被清空：通常是消息已发送 / 手动清空，立即收口这一段，
+        // 否则会把「上一条已发送的消息」和「下一条正在打的」并成一条。
+        if (raw.isBlank()) {
+            flush(key, reason = "cleared")
+            return
+        }
+
         val now = System.currentTimeMillis()
-        val last = lastCaptureAt.get()
-        if (now - last < DEBOUNCE_MS) return
-        if (!lastCaptureAt.compareAndSet(last, now)) return
+        synchronized(lock) {
+            val existing = pending[key]
+            if (existing == null) {
+                pending[key] = PendingCapture(
+                    packageName = pkg,
+                    text = raw,
+                    timestampMs = now,
+                    eventCount = 1
+                )
+            } else {
+                existing.text = raw
+                existing.timestampMs = now
+                existing.eventCount += 1
+            }
 
-        val event = InputTextEvent(
-            packageName = pkg,
-            appLabel = resolveAppLabel(pkg),
-            windowTitle = findWindowTitle(ev),
-            text = trimmed.take(MAX_TEXT_LENGTH),
-            timestampMs = now
-        )
+            // 每次变更重置静默计时器（真正的 debounce：等到「停止输入」才收口）
+            flushJobs.remove(key)?.cancel()
+            flushJobs[key] = scope.launch {
+                delay(QUIET_MS)
+                flush(key, reason = "quiet")
+            }
+        }
+    }
 
-        // 采集开关关闭时不落盘（用 last-known 配置，避免每次 IO 读 DataStore）
-        scope.launch {
+    /**
+     * 收口一段输入并异步落盘。
+     *
+     * 中间态在这里被丢弃：只有 pending 里最后一版文本会被写入，纯拼音、
+     * 已删除的内容都不会出现在结果里。
+     */
+    private fun flush(key: String, reason: String) {
+        val capture: PendingCapture = synchronized(lock) {
+            val c = pending.remove(key) ?: return
+            flushJobs.remove(key)?.cancel()
+            c
+        }
+
+        val text = capture.text.trim().take(MAX_TEXT_LENGTH)
+        if (text.length < MIN_TEXT_LENGTH) {
+            Log.d(TAG, "Drop short capture ($reason, ${text.length} chars)")
+            return
+        }
+
+        writeScope.launch {
             try {
                 val config = OmiConfig(applicationContext).getConfig()
                 if (!config.inputText.enabled) {
-                    Log.d(TAG, "Collect disabled — dropping event")
+                    Log.d(TAG, "Collect disabled — dropping capture")
                     return@launch
                 }
+                val event = InputTextEvent(
+                    packageName = capture.packageName,
+                    appLabel = resolveAppLabel(capture.packageName),
+                    windowTitle = currentWindowTitle(),
+                    text = text,
+                    timestampMs = capture.timestampMs
+                )
                 repository.append(event)
+                Log.d(
+                    TAG,
+                    "Flushed capture ($reason): ${capture.eventCount} event(s) merged -> " +
+                        "${text.length} chars from ${capture.packageName}"
+                )
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to persist input text event", e)
             }
         }
     }
 
+    /** 冲刷所有 pending（服务断开 / 销毁前调用，避免丢最后一段）。 */
+    private fun flushAll(reason: String) {
+        val keys = synchronized(lock) { pending.keys.toList() }
+        keys.forEach { flush(it, reason) }
+    }
+
+    /**
+     * 输入框身份标识：包名 + 窗口 + 视图 ID。
+     *
+     * 同一输入框的连续变更归为一段；切换输入框（例如从聊天框切到搜索框）
+     * 会产生不同的 key，各自独立成段。viewId 拿不到时回落为空串，
+     * 退化为「同包名 + 同窗口」粒度。
+     */
+    private fun buildFieldKey(ev: AccessibilityEvent, pkg: String): String {
+        val source = runCatching { ev.source }.getOrNull()
+        val viewId = try {
+            source?.viewIdResourceName.orEmpty()
+        } catch (_: Exception) {
+            ""
+        } finally {
+            runCatching { @Suppress("DEPRECATION") source?.recycle() }
+        }
+        return "$pkg#${ev.windowId}#$viewId"
+    }
+
     override fun onInterrupt() {
         Log.w(TAG, "Accessibility service interrupted")
+        flushAll(reason = "interrupt")
     }
 
     override fun onDestroy() {
         isConnected = false
+        // 先冲刷（写入走独立 writeScope），再取消计时器
+        flushAll(reason = "destroy")
         scope.cancel()
         super.onDestroy()
     }
 
     /** 从事件里取文本；优先 text 列表，回落到 contentDescription。 */
     private fun extractText(event: AccessibilityEvent): String? {
-        val chunks = event.text
-        if (chunks != null && chunks.isNotEmpty()) {
+        val chunks = event.text.orEmpty()
+        if (chunks.isNotEmpty()) {
             val joined = chunks.joinToString("").trim()
             if (joined.isNotEmpty()) return joined
         }
@@ -168,12 +293,10 @@ class InputTextAccessibilityService : AccessibilityService() {
         return false
     }
 
-    /** 取当前窗口标题（Activity label / 标题栏文本），拿不到返回空串。 */
-    private fun findWindowTitle(event: AccessibilityEvent): String {
-        val fromEvent = runCatching { event.className?.toString() }.getOrNull()
-        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return fromEvent.orEmpty()
+    /** 取当前窗口标题（近似：第一个非空 TextView 文本），拿不到返回空串。 */
+    private fun currentWindowTitle(): String {
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return ""
         try {
-            // 常见标题容器：取第一个非空 text 的 TextView 作为近似标题
             val queue = ArrayDeque<AccessibilityNodeInfo>()
             queue.add(root)
             var visited = 0
@@ -187,9 +310,9 @@ class InputTextAccessibilityService : AccessibilityService() {
                 }
             }
         } catch (e: Exception) {
-            Log.d(TAG, "findWindowTitle failed: ${e.message}")
+            Log.d(TAG, "currentWindowTitle failed: ${e.message}")
         }
-        return fromEvent.orEmpty()
+        return ""
     }
 
     /** 包名 → 应用显示名；失败回落包名。 */
