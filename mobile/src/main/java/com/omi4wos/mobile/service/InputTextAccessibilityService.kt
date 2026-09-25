@@ -15,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * 输入文本采集（无障碍服务）。
@@ -54,14 +55,14 @@ class InputTextAccessibilityService : AccessibilityService() {
         private const val TAG = "InputTextA11y"
 
         /**
-         * 静默窗口（ms）：最后一次文本变更后多久没有新事件，才判定这段输入结束。
+         * 静默窗口兜底值（ms）。**实际生效值来自设置页**（[OmiConfig.InputTextConfig.quietMs]），
+         * 这里只在配置读取失败时用作回落。
          *
-         * 取值依据（2026-09-25 真机数据，747 条快照 / 738 个同 App 相邻间隔）：
-         * 相邻间隔 p50 = 1.02s、p75 = 1.38s，2.0s 有约 2 倍安全边际，
-         * 同时把碎片数压到 ~1/6（747 → 约 124 段）。
+         * 默认 5s：2026-09-25 真机数据（747 条快照 / 738 个同 App 相邻间隔）显示
+         * p50 = 1.02s、p75 = 1.38s，5s 能覆盖绝大多数「停下来想一下」的停顿。
          * 调大 → 更少段、但可能把两句话并成一条；调小 → 反之。
          */
-        private const val QUIET_MS = 2000L
+        private const val QUIET_MS = OmiConfig.DEFAULT_QUIET_MS
 
         /**
          * 输入框被清空后的收口延时（ms）。
@@ -175,13 +176,29 @@ class InputTextAccessibilityService : AccessibilityService() {
                 existing.eventCount += 1
             }
 
-            // 每次变更重置静默计时器（真正的 debounce：等到「停止输入」才收口）
+            // 每次变更重置静默计时器（真正的 debounce：等到「停止输入」才收口）。
+            // 阈值每次现读配置——设置页改完立刻生效，不需要重启服务。
+            val quietMs = currentQuietMs()
             flushJobs.remove(key)?.cancel()
             flushJobs[key] = scope.launch {
-                delay(QUIET_MS)
+                delay(quietMs)
                 flush(key, reason = "quiet")
             }
         }
+    }
+
+    /**
+     * 读取当前生效的静默窗口（ms）。
+     *
+     * **不缓存、每次现读**：服务是常驻进程，设置页改完不该要求用户重启无障碍服务。
+     * DataStore 是异步的，这里在 IO 线程（事件回调已从主线程切出）里阻塞读取；
+     * 读失败时回落到 [QUIET_MS]。
+     */
+    private fun currentQuietMs(): Long = try {
+        runBlocking { OmiConfig(applicationContext).getConfig().inputText.quietMs }
+    } catch (e: Exception) {
+        Log.w(TAG, "Read quietMs failed, fallback to $QUIET_MS: ${e.message}")
+        QUIET_MS
     }
 
     /** 为某段 pending 安排（或重置）收口计时器；pending 已不存在时为空操作。 */

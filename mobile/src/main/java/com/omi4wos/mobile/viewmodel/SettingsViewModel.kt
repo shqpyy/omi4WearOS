@@ -58,6 +58,8 @@ data class SettingsUiState(
     // 输入文本采集
     val inputTextEnabled: Boolean = false,
     val inputTextUploadEnabled: Boolean = false,
+    /** 停止打字阈值（ms）；设置页以「秒」展示，范围 MIN_QUIET_MS..MAX_QUIET_MS */
+    val inputTextQuietMs: Long = OmiConfig.DEFAULT_QUIET_MS,
 
     // 语言（system / en / zh-CN）
     val language: String = OmiConfig.DEFAULT_LANGUAGE,
@@ -103,6 +105,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 callPauseEnabled = config.callPause.enabled,
                 inputTextEnabled = config.inputText.enabled,
                 inputTextUploadEnabled = config.inputText.uploadEnabled,
+                inputTextQuietMs = config.inputText.quietMs,
                 language = config.language
             )
         }
@@ -269,6 +272,21 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * 更新停止打字阈值（ms）。拨动即保存，无需点「保存」——
+     * 无障碍服务每次事件都现读配置，所以改完立刻生效，不必重启服务。
+     */
+    fun updateInputTextQuietMs(valueMs: Long) {
+        val clamped = valueMs.coerceIn(OmiConfig.MIN_QUIET_MS, OmiConfig.MAX_QUIET_MS)
+        _uiState.value = _uiState.value.copy(inputTextQuietMs = clamped)
+        viewModelScope.launch {
+            val current = omiConfig.getConfig()
+            omiConfig.saveConfig(
+                current.copy(inputText = current.inputText.copy(quietMs = clamped))
+            )
+        }
+    }
+
     // ---- 保存 ----
     fun saveSettings() {
         viewModelScope.launch {
@@ -306,7 +324,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         ),
                         inputText = OmiConfig.InputTextConfig(
                             enabled = state.inputTextEnabled,
-                            uploadEnabled = state.inputTextUploadEnabled
+                            uploadEnabled = state.inputTextUploadEnabled,
+                            quietMs = state.inputTextQuietMs.coerceIn(
+                                OmiConfig.MIN_QUIET_MS, OmiConfig.MAX_QUIET_MS
+                            )
                         ),
                         language = state.language
                     )

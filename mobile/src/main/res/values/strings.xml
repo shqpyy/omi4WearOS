@@ -124,6 +124,8 @@
     <string name='input_text_desc'>Captures text you type in other apps (passwords are skipped) so it can be archived with your recordings.</string>
     <string name='input_text_enable'>Enable text collection</string>
     <string name='input_text_upload'>Auto-upload to server</string>
+    <string name='input_text_quiet_title'>Stop-typing threshold</string>
+    <string name='input_text_quiet_desc'>How long without new input before a segment is closed. Larger = fewer fragments but may merge two sentences.</string>
     <string name='input_text_grant'>Open accessibility settings</string>
     <string name='input_text_status_on'>Service enabled</string>
     <string name='input_text_status_off'>Service not enabled — grant accessibility permission</string>

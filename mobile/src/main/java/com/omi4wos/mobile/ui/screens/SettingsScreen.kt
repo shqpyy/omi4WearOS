@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -228,6 +229,7 @@ fun SettingsScreen(
             uiState = uiState,
             onEnabledChange = viewModel::updateInputTextEnabled,
             onUploadEnabledChange = viewModel::updateInputTextUploadEnabled,
+            onQuietMsChange = viewModel::updateInputTextQuietMs,
             onOpenAccessibilitySettings = {
                 try {
                     context.startActivity(
@@ -265,11 +267,69 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * 停止打字阈值滑块。
+ *
+ * 值以「秒」呈现（1–60s），内部存毫秒。为什么做成可调项：这个数字取决于
+ * 个人的打字/思考节奏，以前改一次要重编一次 APK、重新装包，成本太高。
+ * 无障碍服务每次事件都现读配置，所以拖动后**立刻生效**，不必重启服务。
+ */
+@Composable
+private fun QuietMsSlider(
+    quietMs: Long,
+    enabled: Boolean,
+    onQuietMsChange: (Long) -> Unit
+) {
+    val context = LocalContext.current
+    // 本地 state 承接拖动过程，抬手才写配置，避免每拖一格写一次 DataStore
+    val minSec = (OmiConfig.MIN_QUIET_MS / 1000L).toFloat()
+    val maxSec = (OmiConfig.MAX_QUIET_MS / 1000L).toFloat()
+    var sliderSec by remember(quietMs) {
+        mutableStateOf((quietMs / 1000L).toFloat().coerceIn(minSec, maxSec))
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = context.getString(R.string.input_text_quiet_title),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = context.getString(R.string.input_text_quiet_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = "%.0f 秒".format(sliderSec),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (enabled) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Slider(
+            value = sliderSec,
+            onValueChange = { sliderSec = it },
+            onValueChangeFinished = { onQuietMsChange((sliderSec * 1000L).toLong()) },
+            valueRange = minSec..maxSec,
+            steps = ((maxSec - minSec).toInt() - 1).coerceAtLeast(0),
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
 @Composable
 private fun InputTextCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
     onEnabledChange: (Boolean) -> Unit,
     onUploadEnabledChange: (Boolean) -> Unit,
+    onQuietMsChange: (Long) -> Unit,
     onOpenAccessibilitySettings: () -> Unit
 ) {
     val context = LocalContext.current
@@ -340,7 +400,17 @@ private fun InputTextCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 停止打字阈值（秒）：最后一次按键后多久没有新输入才收口成一条。
+            // 做成可调项，改数值不必重编 APK；服务每次事件现读配置，改完立即生效。
+            QuietMsSlider(
+                quietMs = uiState.inputTextQuietMs,
+                enabled = uiState.inputTextEnabled,
+                onQuietMsChange = onQuietMsChange
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedButton(
                 onClick = onOpenAccessibilitySettings,

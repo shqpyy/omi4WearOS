@@ -82,7 +82,15 @@ class OmiConfig(private val context: Context) {
         /** 启用采集（无障碍服务），默认关 —— 敏感功能，用户手动开启 */
         val enabled: Boolean = false,
         /** 自动上传到服务器，默认关 —— 不开则只落本地 JSONL */
-        val uploadEnabled: Boolean = false
+        val uploadEnabled: Boolean = false,
+        /**
+         * 停止打字阈值（毫秒）：最后一次文本变更后多久没有新事件，才判定这段输入结束。
+         *
+         * 做成可调项的原因：这个值取决于个人打字/思考节奏，改一次不该重编一次 APK。
+         * 调大 → 更少碎片，但可能把两句并成一条；调小 → 反之。
+         * 范围见 [MIN_QUIET_MS] / [MAX_QUIET_MS]，默认 [DEFAULT_QUIET_MS]。
+         */
+        val quietMs: Long = DEFAULT_QUIET_MS
     )
     /** 顶层配置聚合 */
     data class Config(
@@ -103,6 +111,11 @@ class OmiConfig(private val context: Context) {
         const val DEFAULT_HTTP_UPLOAD_URL = "http://124.222.91.138:8081/upload-audio"
         const val DEFAULT_HTTP_API_KEY = "OMI_UPLOAD_KEY_2026"
         const val DEFAULT_LANGUAGE = "system"  // system / en / zh-CN
+
+        /** 停止打字阈值范围（ms）与默认值；设置页以「秒」展示 */
+        const val MIN_QUIET_MS = 1000L
+        const val MAX_QUIET_MS = 60000L
+        const val DEFAULT_QUIET_MS = 5000L
 
         // Storage method
         private val KEY_STORAGE_METHOD = stringPreferencesKey("storage_method")
@@ -138,6 +151,7 @@ class OmiConfig(private val context: Context) {
         // Input text collect
         private val KEY_INPUT_TEXT_ENABLED = booleanPreferencesKey("input_text_enabled")
         private val KEY_INPUT_TEXT_UPLOAD_ENABLED = booleanPreferencesKey("input_text_upload_enabled")
+        private val KEY_INPUT_TEXT_QUIET_MS = longPreferencesKey("input_text_quiet_ms")
 
         // Language
         private val KEY_LANGUAGE = stringPreferencesKey("language")
@@ -212,7 +226,9 @@ class OmiConfig(private val context: Context) {
                 ),
                 inputText = InputTextConfig(
                     enabled = prefs[KEY_INPUT_TEXT_ENABLED] ?: false,
-                    uploadEnabled = prefs[KEY_INPUT_TEXT_UPLOAD_ENABLED] ?: false
+                    uploadEnabled = prefs[KEY_INPUT_TEXT_UPLOAD_ENABLED] ?: false,
+                    quietMs = (prefs[KEY_INPUT_TEXT_QUIET_MS] ?: DEFAULT_QUIET_MS)
+                        .coerceIn(MIN_QUIET_MS, MAX_QUIET_MS)
                 ),
                 language = prefs[KEY_LANGUAGE] ?: DEFAULT_LANGUAGE
             )
@@ -240,6 +256,7 @@ class OmiConfig(private val context: Context) {
             prefs[KEY_CALL_PAUSE_ENABLED] = config.callPause.enabled
             prefs[KEY_INPUT_TEXT_ENABLED] = config.inputText.enabled
             prefs[KEY_INPUT_TEXT_UPLOAD_ENABLED] = config.inputText.uploadEnabled
+            prefs[KEY_INPUT_TEXT_QUIET_MS] = config.inputText.quietMs.coerceIn(MIN_QUIET_MS, MAX_QUIET_MS)
             prefs[KEY_LANGUAGE] = config.language
         }
         // 同步落一份语言镜像，供下次 attachBaseContext 无阻塞读取。

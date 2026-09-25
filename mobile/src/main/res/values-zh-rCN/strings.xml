@@ -124,6 +124,8 @@
     <string name='input_text_desc'>采集你在其他 App 里输入的文本（自动跳过密码框），随录音一同归档。</string>
     <string name='input_text_enable'>启用文本采集</string>
     <string name='input_text_upload'>自动上传到服务器</string>
+    <string name='input_text_quiet_title'>停止打字阈值</string>
+    <string name='input_text_quiet_desc'>停止输入多久后判定这段结束。值越大越不易被切断，但两句间隔短时会被合并。</string>
     <string name='input_text_grant'>去开启无障碍权限</string>
     <string name='input_text_status_on'>服务已启用</string>
     <string name='input_text_status_off'>服务未启用 —— 请授予无障碍权限</string>
