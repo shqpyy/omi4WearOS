@@ -123,8 +123,9 @@ class LocalFileUploader(
      *
      * LOCAL_FILE 后端不上网，仅本地归档，因此永远返回 true（写盘失败除外）。
      */
-    override suspend fun uploadInputText(jsonLine: String, fileName: String): Boolean =
+    override suspend fun uploadInputText(eventsJson: List<String>, fileName: String): Boolean =
         withContext(Dispatchers.IO) {
+            if (eventsJson.isEmpty()) return@withContext true
             try {
                 if (!outputDir.exists() && !outputDir.mkdirs()) {
                     Log.e(TAG, "Cannot create output dir: ${outputDir.absolutePath}")
@@ -133,8 +134,10 @@ class LocalFileUploader(
                 val target = File(outputDir, "input_text_events.jsonl")
                 synchronized(target) {
                     FileOutputStream(target, true).use { out ->
-                        out.write(jsonLine.toByteArray(Charsets.UTF_8))
-                        out.write('\n'.code)
+                        for (jsonLine in eventsJson) {
+                            out.write(jsonLine.toByteArray(Charsets.UTF_8))
+                            out.write('\n'.code)
+                        }
                     }
                 }
                 Log.i(TAG, "Appended input text to ${target.absolutePath} (from $fileName)")
