@@ -49,6 +49,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,6 +64,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.mobile.service.BatteryOptimizationHelper
 import com.omi4wos.mobile.viewmodel.SettingsViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -106,50 +108,11 @@ fun SettingsScreen(
             fontWeight = FontWeight.Bold
         )
 
-        // === 存储测试 / 全量保存（放在页面顶部，避免被误认为 HTTP 专用）===
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OutlinedButton(
-                onClick = {
-                    viewModel.testConnection()
-                    scope.launch {
-                        val result = uiState.testResult
-                        if (result != null) snackbarHostState.showSnackbar(result)
-                    }
-                },
-                enabled = !uiState.isTesting,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(if (uiState.isTesting) context.getString(R.string.testing) else context.getString(R.string.test_connection))
-            }
-            Button(
-                onClick = {
-                    viewModel.saveSettings()
-                    scope.launch {
-                        snackbarHostState.showSnackbar(
-                            if (uiState.saveSuccess == true) context.getString(R.string.saved) else context.getString(R.string.saving)
-                        )
-                    }
-                },
-                enabled = !uiState.isSaving,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(if (uiState.isSaving) context.getString(R.string.saving) else context.getString(R.string.save))
-            }
-        }
-
-        uiState.testResult?.let { result ->
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = result,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (result.startsWith("OK")) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.error
-            )
-        }
-
+        // 说明：以前这里有一对全局「测试连接 / 保存」按钮。
+        // 问题是「保存」作用域覆盖全部设置，用户改了某个模块还得滚回页面顶部点它，
+        // 更糟的是**很容易误以为已经生效**（尤其通话录音监听那一块）。
+        // 现在改为：开关/选择器/滑块 → 拨动即存；文本框 → 各模块内部自带保存。
+        // 因此顶部不再需要全局按钮。
         Text(
             text = context.getString(R.string.settings_save_hint),
             style = MaterialTheme.typography.bodySmall,
@@ -170,12 +133,17 @@ fun SettingsScreen(
         when (uiState.storageMethod) {
             OmiConfig.StorageMethod.LOCAL_FILE -> LocalFileConfigCard(
                 uiState = uiState,
-                onOutputDirChange = viewModel::updateLocalOutputDir
+                onOutputDirChange = viewModel::updateLocalOutputDir,
+                onSave = { viewModel.saveModule("LOCAL") },
+                onFeedbackShown = viewModel::consumeSaveFeedback
             )
             OmiConfig.StorageMethod.HTTP -> HttpConfigCard(
                 uiState = uiState,
                 onUrlChange = viewModel::updateHttpUploadUrl,
-                onKeyChange = viewModel::updateHttpApiKey
+                onKeyChange = viewModel::updateHttpApiKey,
+                onSave = { viewModel.saveModule("HTTP") },
+                onTest = viewModel::testConnection,
+                onFeedbackShown = viewModel::consumeSaveFeedback
             )
             OmiConfig.StorageMethod.S3 -> S3ConfigCard(
                 uiState = uiState,
@@ -183,13 +151,14 @@ fun SettingsScreen(
                 onBucketChange = viewModel::updateS3Bucket,
                 onAccessKeyChange = viewModel::updateS3AccessKey,
                 onSecretKeyChange = viewModel::updateS3SecretKey,
-                onRegionChange = viewModel::updateS3Region
+                onRegionChange = viewModel::updateS3Region,
+                onSave = { viewModel.saveModule("S3") },
+                onFeedbackShown = viewModel::consumeSaveFeedback
             )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // （Test / Save 已移至页面顶部，作用于全部设置）
         Spacer(modifier = Modifier.height(24.dp))
 
         // === 4. 通话录音监听 ===
@@ -202,7 +171,9 @@ fun SettingsScreen(
             },
             onClearTreeUri = { viewModel.updatePhoneWatchTreeUri("") },
             onPatternsChange = viewModel::updatePhoneWatchPatterns,
-            onIntervalChange = viewModel::updatePhoneWatchInterval
+            onIntervalChange = viewModel::updatePhoneWatchInterval,
+            onSave = { viewModel.saveModule("PHONE_WATCHER") },
+            onFeedbackShown = viewModel::consumeSaveFeedback
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -211,7 +182,9 @@ fun SettingsScreen(
         LocationSettingsCard(
             uiState = uiState,
             onEnabledChange = viewModel::updateLocationEnabled,
-            onIntervalChange = viewModel::updateLocationInterval
+            onIntervalChange = viewModel::updateLocationInterval,
+            onSave = { viewModel.saveModule("LOCATION") },
+            onFeedbackShown = viewModel::consumeSaveFeedback
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -587,7 +560,9 @@ private fun StorageMethodCard(
 @Composable
 private fun LocalFileConfigCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
-    onOutputDirChange: (String) -> Unit
+    onOutputDirChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onFeedbackShown: () -> Unit
 ) {
             val context = LocalContext.current
     ConfigCard(title = context.getString(R.string.local_config_title)) {
@@ -605,6 +580,13 @@ private fun LocalFileConfigCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Spacer(modifier = Modifier.height(12.dp))
+        ModuleSaveBar(
+            module = "LOCAL",
+            uiState = uiState,
+            onSave = onSave,
+            onFeedbackShown = onFeedbackShown
+        )
     }
 }
 
@@ -612,7 +594,10 @@ private fun LocalFileConfigCard(
 private fun HttpConfigCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
     onUrlChange: (String) -> Unit,
-    onKeyChange: (String) -> Unit
+    onKeyChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onTest: () -> Unit,
+    onFeedbackShown: () -> Unit
 ) {
             val context = LocalContext.current
     ConfigCard(title = context.getString(R.string.http_config_title)) {
@@ -650,6 +635,45 @@ private fun HttpConfigCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Spacer(modifier = Modifier.height(12.dp))
+        // 「测试连接」只测这套 HTTP 参数（上传地址 + API Key），所以它属于这张卡片，
+        // 不属于页面顶部 —— 挂全局时语义是错的。
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = onTest,
+                enabled = !uiState.isTesting,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    if (uiState.isTesting) context.getString(R.string.testing)
+                    else context.getString(R.string.test_connection)
+                )
+            }
+            Button(
+                onClick = onSave,
+                enabled = !uiState.isSaving,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(context.getString(R.string.save))
+            }
+        }
+        uiState.testResult?.let { result ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = result,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (result.startsWith("OK")) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.error
+            )
+        }
+        ModuleSaveFeedback(
+            module = "HTTP",
+            uiState = uiState,
+            onFeedbackShown = onFeedbackShown
+        )
     }
 }
 
@@ -660,7 +684,9 @@ private fun S3ConfigCard(
     onBucketChange: (String) -> Unit,
     onAccessKeyChange: (String) -> Unit,
     onSecretKeyChange: (String) -> Unit,
-    onRegionChange: (String) -> Unit
+    onRegionChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onFeedbackShown: () -> Unit
 ) {
             val context = LocalContext.current
     ConfigCard(title = context.getString(R.string.s3_config_title)) {
@@ -715,6 +741,13 @@ private fun S3ConfigCard(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
+        Spacer(modifier = Modifier.height(12.dp))
+        ModuleSaveBar(
+            module = "S3",
+            uiState = uiState,
+            onSave = onSave,
+            onFeedbackShown = onFeedbackShown
+        )
     }
 }
 
@@ -725,7 +758,9 @@ private fun PhoneWatcherCard(
     onPickDir: () -> Unit,
     onClearTreeUri: () -> Unit,
     onPatternsChange: (String) -> Unit,
-    onIntervalChange: (Int) -> Unit
+    onIntervalChange: (Int) -> Unit,
+    onSave: () -> Unit,
+    onFeedbackShown: () -> Unit
 ) {
             val context = LocalContext.current
     Card(
@@ -826,6 +861,15 @@ private fun PhoneWatcherCard(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                // 开关和目录是即时生效的，剩下的文本框（文件匹配 + 扫描间隔）走这个按钮。
+                ModuleSaveBar(
+                    module = "PHONE_WATCHER",
+                    uiState = uiState,
+                    onSave = onSave,
+                    onFeedbackShown = onFeedbackShown
+                )
             }
         }
     }
@@ -835,7 +879,9 @@ private fun PhoneWatcherCard(
 private fun LocationSettingsCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
     onEnabledChange: (Boolean) -> Unit,
-    onIntervalChange: (Int) -> Unit
+    onIntervalChange: (Int) -> Unit,
+    onSave: () -> Unit,
+    onFeedbackShown: () -> Unit
 ) {
     val context = LocalContext.current
     Card(
@@ -877,6 +923,13 @@ private fun LocationSettingsCard(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                ModuleSaveBar(
+                    module = "LOCATION",
+                    uiState = uiState,
+                    onSave = onSave,
+                    onFeedbackShown = onFeedbackShown
                 )
             }
         }
@@ -1029,6 +1082,63 @@ private fun AboutCard() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+/**
+ * 模块内的「保存」按钮。
+ *
+ * 为什么保存要下沉到模块里：以前页面顶部有一个全局保存，作用是"保存全部设置"。
+ * 后果是用户在某个模块改完东西，如果不记得滚回顶部点它，改动就没生效 ——
+ * 而他看着那个已经拨开的开关，会合理认为已经生效了。这是纯粹的设计误导。
+ *
+ * 现在的规则：
+ *   - 开关 / 单选 / 滑块 / 目录选择器 → 拨动即存，不需要按钮
+ *   - 文本框 → 模块内部自带保存（不能边打字边存，否则会存下半个 URL）
+ */
+@Composable
+private fun ModuleSaveBar(
+    module: String,
+    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
+    onSave: () -> Unit,
+    onFeedbackShown: () -> Unit
+) {
+    val context = LocalContext.current
+    Button(
+        onClick = onSave,
+        enabled = !uiState.isSaving,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            if (uiState.isSaving) context.getString(R.string.saving)
+            else context.getString(R.string.save)
+        )
+    }
+    ModuleSaveFeedback(module = module, uiState = uiState, onFeedbackShown = onFeedbackShown)
+}
+
+/** 模块自己的保存结果回显（只在这个模块下方显示，不弹全局 snackbar）。 */
+@Composable
+private fun ModuleSaveFeedback(
+    module: String,
+    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
+    onFeedbackShown: () -> Unit
+) {
+    val context = LocalContext.current
+    // 只有当"这次保存回显"属于本模块时才显示，避免在 HTTP 里看到 S3 的保存结果
+    val saved = uiState.saveSuccess == true && uiState.lastSavedModule == module
+    val failed = uiState.saveSuccess == false && uiState.lastSavedModule == module
+    if (saved || failed) {
+        LaunchedEffect(module, uiState.saveSuccess) {
+            delay(2000)
+            onFeedbackShown()
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = if (saved) context.getString(R.string.saved) else context.getString(R.string.save_failed),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (saved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+        )
     }
 }
 

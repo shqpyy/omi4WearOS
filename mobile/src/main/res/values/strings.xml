@@ -40,6 +40,7 @@
     <string name='save'>Save</string>
     <string name='saving'>Saving...</string>
     <string name='saved'>Saved</string>
+    <string name='save_failed'>Save failed</string>
     <string name='phone_watcher_title'>Phone Recording Watcher</string>
     <string name='phone_watcher_desc'>Watch a directory for new call recordings and upload them automatically.</string>
     <string name='phone_watcher_pick'>Pick Directory</string>
@@ -84,7 +85,7 @@
     <string name='keepalive_autostart_unavailable_manual'>Could not open auto-start directly. Please enable it manually: Settings > Apps > Startup management.</string>
     <string name='phone_watcher_selected'>Watch directory</string>
     <string name='phone_watcher_none'>Not selected</string>
-    <string name='settings_save_hint'>Save applies all storage &amp; watcher settings, not just HTTP.</string>
+    <string name='settings_save_hint'>Toggles, pickers and sliders save instantly. Text fields have their own Save button inside each module.</string>
     <string name='home_watcher_title'>Call recording watcher</string>
     <string name='home_watcher_off'>Watcher is OFF - enable it in Settings</string>
     <string name='home_watcher_summary'>Today: %1$d files · Uploaded: %2$d · Failed: %3$d</string>
