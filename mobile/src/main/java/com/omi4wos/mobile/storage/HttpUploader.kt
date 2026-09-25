@@ -179,6 +179,87 @@ class HttpUploader(
     }
 
     /**
+     * 上传一条输入文本事件。
+     *
+     * POST application/json 到 uploadUrl 派生出的 /input-text 端点，
+     * 例如 uploadUrl = http://host:8081/upload-audio → http://host:8081/input-text。
+     *
+     * body 形如：
+     *   { "file_name": "input_text_events_2026-09-24.jsonl", "line": "{...}" }
+     */
+    /**
+     * 上传一批输入文本事件到 /input-text。
+     *
+     * 服务端契约（audio_server.py）:
+     *   body: {"events": [ {...}, {...} ]}   ← 必须非空数组, 否则 400
+     *   Header: X-API-Key                     ← 不对则 401
+     * 服务端按 (device_id, timestamp, package_name, text) 四元组去重, 重传安全。
+     *
+     * 部分失败时整批视为失败 (返回 false), 由调用方保留原文件下轮重传;
+     * 服务端去重保证重复不会脏数据。
+     */
+    override suspend fun uploadInputText(eventsJson: List<String>, fileName: String): Boolean =
+        withContext(Dispatchers.IO) {
+            if (!config.isConfigured) {
+                Log.w(TAG, "uploadUrl not configured — skip input text upload")
+                return@withContext false
+            }
+            if (eventsJson.isEmpty()) {
+                Log.w(TAG, "Empty event list — skip input text upload")
+                return@withContext true   // 空批不算失败, 让调用方归档空文件
+            }
+            val url = inputTextEndpoint() ?: run {
+                Log.w(TAG, "Cannot derive /input-text endpoint from ${config.uploadUrl}")
+                return@withContext false
+            }
+            try {
+                val arr = org.json.JSONArray()
+                for (one in eventsJson) {
+                    arr.put(JSONObject(one))
+                }
+                val body = JSONObject()
+                    .put("events", arr)
+                    .toString()
+                    .toRequestBody("application/json; charset=utf-8".toMediaType())
+
+                val requestBuilder = Request.Builder()
+                    .url(url)
+                    .post(body)
+                if (config.uploadApiKey.isNotBlank()) {
+                    requestBuilder.header("X-API-Key", config.uploadApiKey)
+                }
+                val request = requestBuilder.build()
+
+                val response = client.newCall(request).execute()
+                val status = response.code
+                val respBody = response.body?.string()
+                response.close()
+                if (status in 200..299) {
+                    Log.i(TAG, "Input text uploaded ($status, ${eventsJson.size} event(s)) from $fileName: $respBody")
+                    true
+                } else {
+                    Log.w(TAG, "Input text upload failed ($status, ${eventsJson.size} event(s)): $respBody")
+                    false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Input text upload exception (${eventsJson.size} event(s))", e)
+                false
+            }
+        }
+
+    /** 从 uploadUrl 派生 /input-text 端点；无法解析时返回 null。 */
+    private fun inputTextEndpoint(): String? {
+        return try {
+            val base = android.net.Uri.parse(config.uploadUrl)
+            if (base?.host.isNullOrBlank()) return null
+            val port = if (base.port > 0) ":${base.port}" else ""
+            "${base.scheme}://${base.host}$port/input-text"
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
      * 上传一条定位点（网络定位为主）。POST JSON 到 uploadUrl 派生出的 /location 端点,
      * 例如 uploadUrl = http://host:8081/upload → http://host:8081/location。
      *

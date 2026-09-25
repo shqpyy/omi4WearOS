@@ -119,6 +119,36 @@ class LocalFileUploader(
     }
 
     /**
+     * 输入文本「上传」= 追加写入 <outputDir>/input_text_events.jsonl。
+     *
+     * LOCAL_FILE 后端不上网，仅本地归档，因此永远返回 true（写盘失败除外）。
+     */
+    override suspend fun uploadInputText(eventsJson: List<String>, fileName: String): Boolean =
+        withContext(Dispatchers.IO) {
+            if (eventsJson.isEmpty()) return@withContext true
+            try {
+                if (!outputDir.exists() && !outputDir.mkdirs()) {
+                    Log.e(TAG, "Cannot create output dir: ${outputDir.absolutePath}")
+                    return@withContext false
+                }
+                val target = File(outputDir, "input_text_events.jsonl")
+                synchronized(target) {
+                    FileOutputStream(target, true).use { out ->
+                        for (jsonLine in eventsJson) {
+                            out.write(jsonLine.toByteArray(Charsets.UTF_8))
+                            out.write('\n'.code)
+                        }
+                    }
+                }
+                Log.i(TAG, "Appended input text to ${target.absolutePath} (from $fileName)")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to write input text", e)
+                false
+            }
+        }
+
+    /**
      * 扫描 audio/ 目录下所有 segment_XXXX.* 文件，取最大序号。
      * 没有文件返回 0。
      */

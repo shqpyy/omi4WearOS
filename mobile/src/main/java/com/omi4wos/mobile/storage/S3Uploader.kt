@@ -110,6 +110,44 @@ class S3Uploader(
         }
     }
 
+    /**
+     * 输入文本上传。
+     *
+     * S3 场景下把 JSONL 行作为一个对象追加式归档：
+     *   input_text/<YYYYMMDD>/<fileName>
+     * 不做 read-modify-write（会产生额外往返），改用「按行时间分片」的对象命名，
+     * 由服务端/下游合并。若需严格拼接，后续可换成 Multipart Upload。
+     */
+    override suspend fun uploadInputText(eventsJson: List<String>, fileName: String): Boolean =
+        withContext(Dispatchers.IO) {
+            if (!config.isConfigured) {
+                Log.w(TAG, "S3 config incomplete — skip input text upload")
+                return@withContext false
+            }
+            if (eventsJson.isEmpty()) return@withContext true
+            try {
+                val dateKey = dateFmt.format(java.util.Date())
+                // 行级唯一 key, 避免同一天多条互相覆盖
+                val lineKey = eventsJson.hashCode().toUInt().toString(16)
+                val objectKey = "input_text/$dateKey/${fileName.removeSuffix(".jsonl")}_$lineKey.jsonl"
+
+                val bytes = eventsJson.joinToString("\n").toByteArray(Charsets.UTF_8)
+                val metadata = ObjectMetadata().apply {
+                    contentLength = bytes.size.toLong()
+                    contentType = "application/x-ndjson"
+                    addUserMetadata("x-omi-source", "phone_input_text")
+                }
+                s3Client.putObject(
+                    PutObjectRequest(config.bucket, objectKey, ByteArrayInputStream(bytes), metadata)
+                )
+                Log.i(TAG, "Uploaded ${eventsJson.size} input text event(s) to s3://${config.bucket}/$objectKey")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Input text S3 upload failed", e)
+                false
+            }
+        }
+
     override suspend fun testConnection(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
         if (!config.isConfigured) {
             return@withContext Pair(false, "S3 config incomplete")

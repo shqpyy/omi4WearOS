@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.res.stringResource
 import com.omi4wos.mobile.R
+import com.omi4wos.mobile.service.InputTextAccessibilityService
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -222,7 +223,24 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // === 7. 保活引导 ===
+        // === 7. 输入文本采集 ===
+        InputTextCard(
+            uiState = uiState,
+            onEnabledChange = viewModel::updateInputTextEnabled,
+            onUploadEnabledChange = viewModel::updateInputTextUploadEnabled,
+            onOpenAccessibilitySettings = {
+                try {
+                    context.startActivity(
+                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                } catch (_: Exception) {}
+            }
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // === 8. 保活引导 ===
         KeepAliveCard(
             context = context,
             snackbarHostState = snackbarHostState
@@ -244,6 +262,93 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         SnackbarHost(hostState = snackbarHostState)
+    }
+}
+
+@Composable
+private fun InputTextCard(
+    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
+    onEnabledChange: (Boolean) -> Unit,
+    onUploadEnabledChange: (Boolean) -> Unit,
+    onOpenAccessibilitySettings: () -> Unit
+) {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = context.getString(R.string.input_text_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = context.getString(R.string.input_text_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 采集开关（默认关）
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = context.getString(R.string.input_text_enable),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = if (InputTextAccessibilityService.isConnected)
+                            context.getString(R.string.input_text_status_on)
+                        else
+                            context.getString(R.string.input_text_status_off),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (InputTextAccessibilityService.isConnected)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.error
+                    )
+                }
+                Switch(
+                    checked = uiState.inputTextEnabled,
+                    onCheckedChange = onEnabledChange
+                )
+            }
+
+            // 自动上传开关（默认关）
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = context.getString(R.string.input_text_upload),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = uiState.inputTextUploadEnabled,
+                    onCheckedChange = onUploadEnabledChange,
+                    enabled = uiState.inputTextEnabled
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = onOpenAccessibilitySettings,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(context.getString(R.string.input_text_grant))
+            }
+        }
     }
 }
 

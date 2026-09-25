@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  输入文本采集无障碍服务配置。
+
+  eventTypes: typeViewTextChanged —— 只监听文本变更，不要窗口/滚动等噪声事件
+  canRetrieveWindowContent: 需要窗口内容才能识别密码框与窗口标题
+  notificationTimeout: 事件合并窗口(ms)，越小越实时、越耗电
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeViewTextChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/input_text_accessibility_description"
+    android:notificationTimeout="100"
+    android:summary="@string/input_text_accessibility_summary" />

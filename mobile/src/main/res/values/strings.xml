@@ -119,4 +119,16 @@
     <string name='home_log_empty'>No log yet</string>
     <string name='home_log_copied'>Log copied to clipboard</string>
     <string name='home_log_share_subject'>omi4wOS app log</string>
+
+    <string name='input_text_title'>Input text collection</string>
+    <string name='input_text_desc'>Captures text you type in other apps (passwords are skipped) so it can be archived with your recordings.</string>
+    <string name='input_text_enable'>Enable text collection</string>
+    <string name='input_text_upload'>Auto-upload to server</string>
+    <string name='input_text_grant'>Open accessibility settings</string>
+    <string name='input_text_status_on'>Service enabled</string>
+    <string name='input_text_status_off'>Service not enabled — grant accessibility permission</string>
+    <string name='input_text_pending'>Pending: %1$s</string>
+    <string name='input_text_upload_now'>Upload now</string>
+    <string name='input_text_accessibility_summary'>Collects typed text for omi4wOS</string>
+    <string name='input_text_accessibility_description'>Captures text you type in other apps and saves it locally. Password fields are skipped. Upload happens only if you enable it.</string>
 </resources>
