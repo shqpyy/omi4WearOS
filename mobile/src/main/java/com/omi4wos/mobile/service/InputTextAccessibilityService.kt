@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
  * - 冲刷时只写入**最终态**文本，中间态与已删除内容一律不落盘。
  *
  * 额外规则：
- * - 输入框被清空（发送后 / 手动清空）→ 立即冲刷，避免把相邻两条消息并成一条；
+ * - 输入框被清空（发送后 / 手动清空）→ 短延时收口，避免相邻两条并成一条；
  * - 长度过滤（[MIN_TEXT_LENGTH]）放在**冲刷时**而非捕获时，中间态不参与过滤；
  * - 服务中断 / 销毁时冲刷全部 pending，避免丢最后一段。
  *
@@ -62,6 +62,15 @@ class InputTextAccessibilityService : AccessibilityService() {
          * 调大 → 更少段、但可能把两句话并成一条；调小 → 反之。
          */
         private const val QUIET_MS = 2000L
+
+        /**
+         * 输入框被清空后的收口延时（ms）。
+         *
+         * 比 [QUIET_MS] 短得多：清空通常意味着「这条已发送」，应尽快落盘；
+         * 但不为 0 —— 部分输入法在候选上屏时会瞬时清空再回填，
+         * 立即冲刷会造成「冲刷后又建一条同样 pending」的重复记录。
+         */
+        private const val SHORT_QUIET_MS = 300L
 
         /** 最短落盘长度：过短的多为单字误触/联想，噪声大（在冲刷时判定） */
         private const val MIN_TEXT_LENGTH = 2
@@ -137,13 +146,16 @@ class InputTextAccessibilityService : AccessibilityService() {
             return
         }
 
-        val key = buildFieldKey(ev, pkg)
-        val raw = extractText(ev).orEmpty()
+        // 取不到文本信息的事件（既无 text 也无 contentDescription）直接忽略。
+        // 不能当成「输入框被清空」处理——那会误伤正在编辑中的 pending。
+        val raw = extractText(ev) ?: return
 
-        // 输入框被清空：通常是消息已发送 / 手动清空，立即收口这一段，
+        val key = buildFieldKey(ev, pkg)
+
+        // 输入框被清空：通常是消息已发送 / 手动清空，应尽快收口这一段，
         // 否则会把「上一条已发送的消息」和「下一条正在打的」并成一条。
         if (raw.isBlank()) {
-            flush(key, reason = "cleared")
+            scheduleFlush(key, SHORT_QUIET_MS, reason = "cleared")
             return
         }
 
@@ -168,6 +180,18 @@ class InputTextAccessibilityService : AccessibilityService() {
             flushJobs[key] = scope.launch {
                 delay(QUIET_MS)
                 flush(key, reason = "quiet")
+            }
+        }
+    }
+
+    /** 为某段 pending 安排（或重置）收口计时器；pending 已不存在时为空操作。 */
+    private fun scheduleFlush(key: String, delayMs: Long, reason: String) {
+        synchronized(lock) {
+            if (!pending.containsKey(key)) return
+            flushJobs.remove(key)?.cancel()
+            flushJobs[key] = scope.launch {
+                delay(delayMs)
+                flush(key, reason = reason)
             }
         }
     }
