@@ -19,6 +19,7 @@ import com.omi4wos.mobile.storage.HttpUploader
 import com.omi4wos.mobile.storage.StorageUploader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -227,7 +228,7 @@ class LocationUploader(private val context: Context) {
                 )
                 if (ok) recordSuccess(location, source)
                 else recordFailure("上报失败：服务器未接受（检查上传地址与 Key）")
-                Log.i(TAG, "Location ${location.latitude},${location.longitude} acc=${location.accuracy}m ok=$ok")
+                AppLog.i(TAG, "定位上报结果 lat=${location.latitude} lon=${location.longitude} acc=${location.accuracy}m source=$source ok=$ok")
                 ok
             } catch (t: Throwable) {
                 Log.e(TAG, "Location upload failed", t)
@@ -379,12 +380,32 @@ class LocationUploader(private val context: Context) {
         }
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /**
+     * 采样协程作用域。
+     *
+     * ⚠️ 必须是 var 且可重建：CoroutineScope.cancel() 是**永久**的，
+     * 一旦 stop() 调过 cancel，后续 launch{} 会全部静默失败。
+     * 历史 bug：设置页关开关 -> stop() -> scope 报废 -> 之后 start()/applySettings()
+     * 只重排 tick 不重建 scope，导致"循环在跑但一条都不传"，只能重启 App 恢复。
+     * 所以任何要 launch 的入口都必须先 ensureScope()。
+     */
+    @Volatile private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val handler = Handler(Looper.getMainLooper())
 
     /** 上一次成功采样并上传的位置时间戳, 避免同一条位置重复传。 */
     @Volatile private var lastSampledAt = 0L
     @Volatile private var started = false
+
+    /**
+     * 保证 [scope] 处于可用状态：已 cancel（或被 stop 干掉）就重建一个。
+     * 幂等，可安全重复调用。
+     */
+    private fun ensureScope() {
+        if (!scope.isActive) {
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            Log.i(TAG, "Location uploader scope recreated")
+        }
+    }
 
     private val tickRunnable = object : Runnable {
         override fun run() {
@@ -407,6 +428,8 @@ class LocationUploader(private val context: Context) {
             Log.i(TAG, "Location uploader disabled by settings, skip start")
             return
         }
+        started = true
+        ensureScope()
         handler.removeCallbacks(tickRunnable)
         handler.postDelayed(tickRunnable, GRACE_MS)
         scope.launch { runCatching { refreshStatus(context.applicationContext) } }
@@ -428,7 +451,8 @@ class LocationUploader(private val context: Context) {
             stop()
             return
         }
-        if (!started) { started = true }
+        started = true
+        ensureScope()
         handler.removeCallbacks(tickRunnable)
         handler.postDelayed(tickRunnable, GRACE_MS)
         scope.launch { runCatching { refreshStatus(context.applicationContext) } }
@@ -439,9 +463,14 @@ class LocationUploader(private val context: Context) {
 
     fun stop() {
         handler.removeCallbacks(tickRunnable)
+        // cancel 是永久的，取消后立刻重建一个干净的 scope，
+        // 避免后续 start()/applySettings() 的 launch 落在死 scope 上。
         scope.cancel()
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        lastSampledAt = 0L
         started = false
-        instance = null
+        // 不清 instance：保留单例引用，防止外部仍持有旧实例时状态错乱。
+        // 用户重新开启时会走 applySettings()/start()，两者都会 ensureScope()。
         Log.i(TAG, "Location uploader stopped")
         AppLog.i(TAG, "定位上传器已停止")
     }
