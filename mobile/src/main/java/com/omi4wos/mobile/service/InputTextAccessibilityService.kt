@@ -239,6 +239,16 @@ class InputTextAccessibilityService : AccessibilityService() {
                     Log.d(TAG, "Collect disabled — dropping capture")
                     return@launch
                 }
+                // 客户端过滤：短 ASCII 噪声
+                val configForFilter = runCatching { OmiConfig(applicationContext).getConfig() }.getOrNull()
+                val filtered = configForFilter?.inputText?.filterShortAscii == true &&
+                    text.length <= 3 &&
+                    text.all { it in 'a'..'z' }
+                if (filtered) {
+                    Log.d(TAG, "Filtered short ASCII: $text")
+                    return@launch
+                }
+
                 val event = InputTextEvent(
                     packageName = capture.packageName,
                     appLabel = resolveAppLabel(capture.packageName),
