@@ -135,5 +135,3 @@
     <string name='input_text_accessibility_summary'>为 omi4wOS 采集输入文本</string>
     <string name='input_text_accessibility_description'>采集你在其他 App 中输入的文本并保存到本地，自动跳过密码框。仅在你开启后才会自动上传。</string>
 </resources>
-    <string name='input_text_filter_short_ascii'>过滤短 ASCII 噪声</string>
-    <string name='input_text_filter_short_ascii_max_length'>短 ASCII 最大长度</string>

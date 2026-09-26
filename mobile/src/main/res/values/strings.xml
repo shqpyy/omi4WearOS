@@ -135,5 +135,3 @@
     <string name='input_text_accessibility_summary'>Collects typed text for omi4wOS</string>
     <string name='input_text_accessibility_description'>Captures text you type in other apps and saves it locally. Password fields are skipped. Upload happens only if you enable it.</string>
 </resources>
-    <string name='input_text_filter_short_ascii'>Filter short ASCII noise</string>
-    <string name='input_text_filter_short_ascii_max_length'>Short ASCII max length</string>
