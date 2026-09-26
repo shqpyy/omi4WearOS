@@ -61,6 +61,7 @@ data class SettingsUiState(
     val inputTextUploadEnabled: Boolean = false,
     /** 停止打字阈值（ms）；设置页以「秒」展示，范围 MIN_QUIET_MS..MAX_QUIET_MS */
     val inputTextQuietMs: Long = OmiConfig.DEFAULT_QUIET_MS,
+    val inputTextFilterShortAscii: Boolean = false,
 
     // 语言（system / en / zh-CN）
     val language: String = OmiConfig.DEFAULT_LANGUAGE,
@@ -114,6 +115,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 inputTextEnabled = config.inputText.enabled,
                 inputTextUploadEnabled = config.inputText.uploadEnabled,
                 inputTextQuietMs = config.inputText.quietMs,
+                inputTextFilterShortAscii = config.inputText.filterShortAscii,
                 language = config.language
             )
         }
@@ -278,6 +280,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { persist() }
     }
 
+    fun updateInputTextFilterShortAscii(value: Boolean) {
+        _uiState.value = _uiState.value.copy(inputTextFilterShortAscii = value)
+        viewModelScope.launch { persist() }
+    }
+
     // ---- 保存 ----
     /**
      * 把当前 UI 状态组装成一份完整配置。
@@ -321,7 +328,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 uploadEnabled = state.inputTextUploadEnabled,
                 quietMs = state.inputTextQuietMs.coerceIn(
                     OmiConfig.MIN_QUIET_MS, OmiConfig.MAX_QUIET_MS
-                )
+                ),
+                filterShortAscii = state.inputTextFilterShortAscii
             ),
             language = state.language
         )

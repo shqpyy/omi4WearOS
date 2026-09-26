@@ -203,6 +203,7 @@ fun SettingsScreen(
             onEnabledChange = viewModel::updateInputTextEnabled,
             onUploadEnabledChange = viewModel::updateInputTextUploadEnabled,
             onQuietMsChange = viewModel::updateInputTextQuietMs,
+            onFilterShortAsciiChange = viewModel::updateInputTextFilterShortAscii,
             onOpenAccessibilitySettings = {
                 try {
                     context.startActivity(
@@ -374,6 +375,24 @@ private fun InputTextCard(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            // 过滤短 ASCII 噪声
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = context.getString(R.string.input_text_filter_short_ascii),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = uiState.inputTextFilterShortAscii,
+                    onCheckedChange = onFilterShortAsciiChange,
+                    enabled = uiState.inputTextEnabled
+                )
+            }
 
             // 停止打字阈值（秒）：最后一次按键后多久没有新输入才收口成一条。
             // 做成可调项，改数值不必重编 APK；服务每次事件现读配置，改完立即生效。
