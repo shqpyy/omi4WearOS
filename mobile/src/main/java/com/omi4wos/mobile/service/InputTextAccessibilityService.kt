@@ -242,7 +242,7 @@ class InputTextAccessibilityService : AccessibilityService() {
                 // 客户端过滤：短 ASCII 噪声
                 val configForFilter = runCatching { OmiConfig(applicationContext).getConfig() }.getOrNull()
                 val filtered = configForFilter?.inputText?.filterShortAscii == true &&
-                    text.length <= 3 &&
+                    text.length <= (configForFilter.inputText.filterShortAsciiMaxLength.coerceIn(1, 20).takeIf { it > 0 } ?: 3) &&
                     text.all { it in 'a'..'z' }
                 if (filtered) {
                     Log.d(TAG, "Filtered short ASCII: $text")

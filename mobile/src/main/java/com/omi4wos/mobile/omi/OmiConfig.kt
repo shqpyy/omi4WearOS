@@ -94,11 +94,13 @@ class OmiConfig(private val context: Context) {
         /**
          * 上传前过滤短 ASCII 噪声（默认关）。
          *
-         * 过滤规则：纯 ASCII、全小写、长度 <=3 的记录不上传。
+         * 过滤规则：纯 ASCII、全小写、且长度 <= [maxLength] 的记录不上传。
          * 目的：减少输入法拼音尾（如 `wo`/`ai`）上传，但会误伤少量短英文。
          * 误伤英文可接受时再开。
          */
-        val filterShortAscii: Boolean = false
+        val filterShortAscii: Boolean = false,
+        /** 自定义最大长度，<=0 时回落到默认值 3 */
+        val filterShortAsciiMaxLength: Int = 3
     )
     /** 顶层配置聚合 */
     data class Config(
@@ -161,6 +163,7 @@ class OmiConfig(private val context: Context) {
         private val KEY_INPUT_TEXT_UPLOAD_ENABLED = booleanPreferencesKey("input_text_upload_enabled")
         private val KEY_INPUT_TEXT_QUIET_MS = longPreferencesKey("input_text_quiet_ms")
         private val KEY_INPUT_TEXT_FILTER_SHORT_ASCII = booleanPreferencesKey("input_text_filter_short_ascii")
+        private val KEY_INPUT_TEXT_FILTER_SHORT_ASCII_MAX_LENGTH = intPreferencesKey("input_text_filter_short_ascii_max_length")
 
         // Language
         private val KEY_LANGUAGE = stringPreferencesKey("language")
@@ -238,7 +241,8 @@ class OmiConfig(private val context: Context) {
                     uploadEnabled = prefs[KEY_INPUT_TEXT_UPLOAD_ENABLED] ?: false,
                     quietMs = (prefs[KEY_INPUT_TEXT_QUIET_MS] ?: DEFAULT_QUIET_MS)
                         .coerceIn(MIN_QUIET_MS, MAX_QUIET_MS),
-                    filterShortAscii = prefs[KEY_INPUT_TEXT_FILTER_SHORT_ASCII] ?: false
+                    filterShortAscii = prefs[KEY_INPUT_TEXT_FILTER_SHORT_ASCII] ?: false,
+                    filterShortAsciiMaxLength = prefs[KEY_INPUT_TEXT_FILTER_SHORT_ASCII_MAX_LENGTH] ?: 3
                 ),
                 language = prefs[KEY_LANGUAGE] ?: DEFAULT_LANGUAGE
             )
@@ -268,6 +272,7 @@ class OmiConfig(private val context: Context) {
             prefs[KEY_INPUT_TEXT_UPLOAD_ENABLED] = config.inputText.uploadEnabled
             prefs[KEY_INPUT_TEXT_QUIET_MS] = config.inputText.quietMs.coerceIn(MIN_QUIET_MS, MAX_QUIET_MS)
             prefs[KEY_INPUT_TEXT_FILTER_SHORT_ASCII] = config.inputText.filterShortAscii
+            prefs[KEY_INPUT_TEXT_FILTER_SHORT_ASCII_MAX_LENGTH] = config.inputText.filterShortAsciiMaxLength
             prefs[KEY_LANGUAGE] = config.language
         }
         // 同步落一份语言镜像，供下次 attachBaseContext 无阻塞读取。

@@ -204,6 +204,7 @@ fun SettingsScreen(
             onUploadEnabledChange = viewModel::updateInputTextUploadEnabled,
             onQuietMsChange = viewModel::updateInputTextQuietMs,
             onFilterShortAsciiChange = viewModel::updateInputTextFilterShortAscii,
+            onFilterShortAsciiMaxLengthChange = viewModel::updateInputTextFilterShortAsciiMaxLength,
             onOpenAccessibilitySettings = {
                 try {
                     context.startActivity(
@@ -392,6 +393,25 @@ private fun InputTextCard(
                     onCheckedChange = onFilterShortAsciiChange,
                     enabled = uiState.inputTextEnabled
                 )
+            }
+
+            // 短 ASCII 最大长度
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = context.getString(R.string.input_text_filter_short_ascii_max_length),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedButton(onClick = {
+                    val next = (uiState.inputTextFilterShortAsciiMaxLength + 1).coerceIn(1, 10)
+                    onFilterShortAsciiMaxLengthChange(next)
+                }) {
+                    Text("${uiState.inputTextFilterShortAsciiMaxLength}")
+                }
             }
 
             // 停止打字阈值（秒）：最后一次按键后多久没有新输入才收口成一条。
