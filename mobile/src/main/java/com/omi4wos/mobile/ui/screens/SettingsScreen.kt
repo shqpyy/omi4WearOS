@@ -397,7 +397,7 @@ private fun InputTextCard(
                 )
             }
 
-            // 短 ASCII 最大长度
+            // 短 ASCII 最大长度（1–10 步进器）
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -408,11 +408,22 @@ private fun InputTextCard(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f)
                 )
-                OutlinedButton(onClick = {
+                IconButton(onClick = {
+                    val next = (uiState.inputTextFilterShortAsciiMaxLength - 1).coerceIn(1, 10)
+                    onFilterShortAsciiMaxLengthChange(next)
+                }) {
+                    Text("-", fontWeight = FontWeight.Bold)
+                }
+                Text(
+                    text = "${uiState.inputTextFilterShortAsciiMaxLength}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+                IconButton(onClick = {
                     val next = (uiState.inputTextFilterShortAsciiMaxLength + 1).coerceIn(1, 10)
                     onFilterShortAsciiMaxLengthChange(next)
                 }) {
-                    Text("${uiState.inputTextFilterShortAsciiMaxLength}")
+                    Text("+", fontWeight = FontWeight.Bold)
                 }
             }
 
