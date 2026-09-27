@@ -20,6 +20,8 @@ data class InputTextEvent(
     val appLabel: String,
     /** 当前窗口标题（可能为空） */
     val windowTitle: String,
+    /** 聊天对象名/群名；非聊天 App 为空字符串 */
+    val chatTitle: String = "",
     /** 采集到的文本 */
     val text: String,
     /** 事件时间 epoch ms */
@@ -46,6 +48,7 @@ data class InputTextEvent(
         put("app_name", appLabel)
         put("text", text)
         put("timestamp", isoFmt.format(Date(timestampMs)))
+        put("chat_title", chatTitle)
     }
 
     /** 服务端扁平格式的 JSON 行（用于 HTTP 上传的 events 数组元素） */
@@ -55,6 +58,7 @@ data class InputTextEvent(
         put("package_name", packageName)
         put("app_label", appLabel)
         put("window_title", windowTitle)
+        put("chat_title", chatTitle)
         put("text", text)
         put("text_length", textLength)
         put("timestamp", isoFmt.format(Date(timestampMs)))
@@ -93,6 +97,7 @@ data class InputTextEvent(
                 })
                 put("text", local.optString("text"))
                 put("timestamp", local.optString("timestamp"))
+                put("chat_title", local.optString("chat_title"))
             }.toString()
         }
 

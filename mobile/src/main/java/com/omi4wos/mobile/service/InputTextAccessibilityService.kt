@@ -253,6 +253,7 @@ class InputTextAccessibilityService : AccessibilityService() {
                     packageName = capture.packageName,
                     appLabel = resolveAppLabel(capture.packageName),
                     windowTitle = currentWindowTitle(),
+                    chatTitle = currentWindowTitle(),
                     text = text,
                     timestampMs = capture.timestampMs
                 )
