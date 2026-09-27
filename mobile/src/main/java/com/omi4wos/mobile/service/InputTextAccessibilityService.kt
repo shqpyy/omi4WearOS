@@ -253,7 +253,7 @@ class InputTextAccessibilityService : AccessibilityService() {
                     packageName = capture.packageName,
                     appLabel = resolveAppLabel(capture.packageName),
                     windowTitle = currentWindowTitle(),
-                    chatTitle = currentWindowTitle(),
+                    chatTitle = currentWindowTitle(capture.packageName),
                     text = text,
                     timestampMs = capture.timestampMs
                 )
@@ -347,8 +347,18 @@ class InputTextAccessibilityService : AccessibilityService() {
 
     /** 取当前窗口标题（近似：第一个非空 TextView 文本），拿不到返回空串。 */
     private fun currentWindowTitle(): String {
+        return currentWindowTitle(packageName = null)
+    }
+
+    /** 取当前窗口标题；支持按包名做专属提取。 */
+    private fun currentWindowTitle(packageName: String?): String {
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return ""
         try {
+            if (packageName == "com.tencent.mm") {
+                val wechatTitle = extractWeChatTitle(root)
+                if (!wechatTitle.isNullOrEmpty()) return wechatTitle
+            }
+
             val queue = ArrayDeque<AccessibilityNodeInfo>()
             queue.add(root)
             var visited = 0
@@ -365,6 +375,38 @@ class InputTextAccessibilityService : AccessibilityService() {
             Log.d(TAG, "currentWindowTitle failed: ${e.message}")
         }
         return ""
+    }
+
+    /** 微信专属标题提取：优先命中常见聊天标题 viewId。 */
+    private fun extractWeChatTitle(root: AccessibilityNodeInfo): String? {
+        val wechatTitleIds = listOf(
+            "com.tencent.mm:id/title",
+            "com.tencent.mm:id/chat_title",
+            "com.tencent.mm:id/contact_name",
+            "com.tencent.mm:id/actionbar_title",
+            "com.tencent.mm:id/toolbar_title"
+        )
+
+        for (viewId in wechatTitleIds) {
+            try {
+                val nodes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+                    runCatching { root.findAccessibilityNodeInfosByViewId(viewId) }.getOrNull()
+                } else null ?: continue
+
+                for (node in nodes) {
+                    val text = node.text?.toString()?.trim()
+                    if (!text.isNullOrEmpty() && text.length in 2..40) {
+                        runCatching { node.recycle() }
+                        return text
+                    }
+                    runCatching { node.recycle() }
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "extractWeChatTitle failed for $viewId: ${e.message}")
+            }
+        }
+
+        return null
     }
 
     /** 包名 → 应用显示名；失败回落包名。 */
