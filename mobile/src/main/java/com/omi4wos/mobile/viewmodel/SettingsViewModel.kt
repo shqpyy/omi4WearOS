@@ -63,7 +63,6 @@ data class SettingsUiState(
     val inputTextQuietMs: Long = OmiConfig.DEFAULT_QUIET_MS,
     val inputTextFilterShortAscii: Boolean = false,
     val inputTextFilterShortAsciiMaxLength: Int = 3,
-    val inputTextFilterShortAscii: Boolean = false,
 
     // 语言（system / en / zh-CN）
     val language: String = OmiConfig.DEFAULT_LANGUAGE,

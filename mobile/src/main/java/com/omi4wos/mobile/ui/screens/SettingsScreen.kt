@@ -305,6 +305,8 @@ private fun InputTextCard(
     onEnabledChange: (Boolean) -> Unit,
     onUploadEnabledChange: (Boolean) -> Unit,
     onQuietMsChange: (Long) -> Unit,
+    onFilterShortAsciiChange: (Boolean) -> Unit,
+    onFilterShortAsciiMaxLengthChange: (Int) -> Unit,
     onOpenAccessibilitySettings: () -> Unit
 ) {
     val context = LocalContext.current
