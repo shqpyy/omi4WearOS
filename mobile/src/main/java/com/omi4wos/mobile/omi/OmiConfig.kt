@@ -62,8 +62,7 @@ class OmiConfig(private val context: Context) {
         val enabled: Boolean = false,
         val watchDir: String = "",                       // 手动输入路径（与 treeUri 二选一）
         val treeUri: String = "",                        // SAF 授权的目录 URI（优先）
-        val filePatterns: String = DEFAULT_FILE_PATTERNS, // 分号分隔, 如 *.amr;*.m4a
-        val scanIntervalSec: Int = 60                    // 扫描间隔（秒）
+        val scanIntervalMin: Int = 1                      // 扫描间隔（分钟）
     )
 
     /** 定位上报配置 */
@@ -83,6 +82,8 @@ class OmiConfig(private val context: Context) {
         val enabled: Boolean = false,
         /** 自动上传到服务器，默认关 —— 不开则只落本地 JSONL */
         val uploadEnabled: Boolean = false,
+        /** 上传间隔（分钟）。默认 30 分钟，用于控制文本上传频率 */
+        val uploadIntervalMin: Int = 30,
         /**
          * 停止打字阈值（毫秒）：最后一次文本变更后多久没有新事件，才判定这段输入结束。
          *
@@ -117,7 +118,6 @@ class OmiConfig(private val context: Context) {
 
     companion object {
         const val DEFAULT_LOCAL_OUTPUT_DIR = "/storage/emulated/0/omi4wos"
-        const val DEFAULT_FILE_PATTERNS = "*.amr;*.m4a;*.mp3;*.aac;*.opus"
         const val DEFAULT_HTTP_UPLOAD_URL = "http://124.222.91.138:8081/upload-audio"
         const val DEFAULT_HTTP_API_KEY = "OMI_UPLOAD_KEY_2026"
         const val DEFAULT_LANGUAGE = "system"  // system / en / zh-CN
@@ -148,7 +148,6 @@ class OmiConfig(private val context: Context) {
         private val KEY_PW_ENABLED = booleanPreferencesKey("pw_enabled")
         private val KEY_PW_DIR = stringPreferencesKey("pw_dir")
         private val KEY_PW_TREE_URI = stringPreferencesKey("pw_tree_uri")
-        private val KEY_PW_PATTERNS = stringPreferencesKey("pw_patterns")
         private val KEY_PW_INTERVAL = intPreferencesKey("pw_interval")
 
         // Location
@@ -161,6 +160,7 @@ class OmiConfig(private val context: Context) {
         // Input text collect
         private val KEY_INPUT_TEXT_ENABLED = booleanPreferencesKey("input_text_enabled")
         private val KEY_INPUT_TEXT_UPLOAD_ENABLED = booleanPreferencesKey("input_text_upload_enabled")
+        private val KEY_INPUT_TEXT_UPLOAD_INTERVAL = intPreferencesKey("input_text_upload_interval")
         private val KEY_INPUT_TEXT_QUIET_MS = longPreferencesKey("input_text_quiet_ms")
         private val KEY_INPUT_TEXT_FILTER_SHORT_ASCII = booleanPreferencesKey("input_text_filter_short_ascii")
         private val KEY_INPUT_TEXT_FILTER_SHORT_ASCII_MAX_LENGTH = intPreferencesKey("input_text_filter_short_ascii_max_length")
@@ -226,8 +226,7 @@ class OmiConfig(private val context: Context) {
                     enabled = prefs[KEY_PW_ENABLED] ?: false,
                     watchDir = prefs[KEY_PW_DIR] ?: "",
                     treeUri = prefs[KEY_PW_TREE_URI] ?: "",
-                    filePatterns = prefs[KEY_PW_PATTERNS] ?: DEFAULT_FILE_PATTERNS,
-                    scanIntervalSec = prefs[KEY_PW_INTERVAL] ?: 60
+                    scanIntervalMin = prefs[KEY_PW_INTERVAL] ?: 1
                 ),
                 location = LocationConfig(
                     enabled = prefs[KEY_LOC_ENABLED] ?: true,
@@ -239,6 +238,7 @@ class OmiConfig(private val context: Context) {
                 inputText = InputTextConfig(
                     enabled = prefs[KEY_INPUT_TEXT_ENABLED] ?: false,
                     uploadEnabled = prefs[KEY_INPUT_TEXT_UPLOAD_ENABLED] ?: false,
+                    uploadIntervalMin = prefs[KEY_INPUT_TEXT_UPLOAD_INTERVAL] ?: 30,
                     quietMs = (prefs[KEY_INPUT_TEXT_QUIET_MS] ?: DEFAULT_QUIET_MS)
                         .coerceIn(MIN_QUIET_MS, MAX_QUIET_MS),
                     filterShortAscii = prefs[KEY_INPUT_TEXT_FILTER_SHORT_ASCII] ?: false,
@@ -263,13 +263,13 @@ class OmiConfig(private val context: Context) {
             prefs[KEY_PW_ENABLED] = config.phoneWatcher.enabled
             prefs[KEY_PW_DIR] = config.phoneWatcher.watchDir
             prefs[KEY_PW_TREE_URI] = config.phoneWatcher.treeUri
-            prefs[KEY_PW_PATTERNS] = config.phoneWatcher.filePatterns
-            prefs[KEY_PW_INTERVAL] = config.phoneWatcher.scanIntervalSec
+            prefs[KEY_PW_INTERVAL] = config.phoneWatcher.scanIntervalMin
             prefs[KEY_LOC_ENABLED] = config.location.enabled
             prefs[KEY_LOC_INTERVAL] = config.location.intervalMin
             prefs[KEY_CALL_PAUSE_ENABLED] = config.callPause.enabled
             prefs[KEY_INPUT_TEXT_ENABLED] = config.inputText.enabled
             prefs[KEY_INPUT_TEXT_UPLOAD_ENABLED] = config.inputText.uploadEnabled
+            prefs[KEY_INPUT_TEXT_UPLOAD_INTERVAL] = config.inputText.uploadIntervalMin
             prefs[KEY_INPUT_TEXT_QUIET_MS] = config.inputText.quietMs.coerceIn(MIN_QUIET_MS, MAX_QUIET_MS)
             prefs[KEY_INPUT_TEXT_FILTER_SHORT_ASCII] = config.inputText.filterShortAscii
             prefs[KEY_INPUT_TEXT_FILTER_SHORT_ASCII_MAX_LENGTH] = config.inputText.filterShortAsciiMaxLength
@@ -303,8 +303,7 @@ class OmiConfig(private val context: Context) {
                 enabled = prefs[KEY_PW_ENABLED] ?: false,
                 watchDir = prefs[KEY_PW_DIR] ?: "",
                 treeUri = prefs[KEY_PW_TREE_URI] ?: "",
-                filePatterns = prefs[KEY_PW_PATTERNS] ?: DEFAULT_FILE_PATTERNS,
-                scanIntervalSec = prefs[KEY_PW_INTERVAL] ?: 60
+                scanIntervalMin = prefs[KEY_PW_INTERVAL] ?: 1
             ),
             location = LocationConfig(
                 enabled = prefs[KEY_LOC_ENABLED] ?: true,

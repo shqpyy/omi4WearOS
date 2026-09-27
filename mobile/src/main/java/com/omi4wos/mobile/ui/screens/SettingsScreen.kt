@@ -166,12 +166,11 @@ fun SettingsScreen(
             uiState = uiState,
             onEnabledChange = viewModel::updatePhoneWatcherEnabled,
             onPickDir = {
-                // 若已选过目录, 打开 picker 时直达该文件夹而非根目录, 减少全量枚举导致的延迟
                 pickDirLauncher.launch(initialTreeDocumentUri(uiState.phoneWatchTreeUri))
             },
             onClearTreeUri = { viewModel.updatePhoneWatchTreeUri("") },
-            onPatternsChange = viewModel::updatePhoneWatchPatterns,
             onIntervalChange = viewModel::updatePhoneWatchInterval,
+            onTriggerNow = viewModel::triggerPhoneWatcherNow,
             onSave = { viewModel.saveModule("PHONE_WATCHER") },
             onFeedbackShown = viewModel::consumeSaveFeedback
         )
@@ -183,6 +182,7 @@ fun SettingsScreen(
             uiState = uiState,
             onEnabledChange = viewModel::updateLocationEnabled,
             onIntervalChange = viewModel::updateLocationInterval,
+            onTriggerNow = viewModel::triggerLocationNow,
             onSave = { viewModel.saveModule("LOCATION") },
             onFeedbackShown = viewModel::consumeSaveFeedback
         )
@@ -205,6 +205,8 @@ fun SettingsScreen(
             onQuietMsChange = viewModel::updateInputTextQuietMs,
             onFilterShortAsciiChange = viewModel::updateInputTextFilterShortAscii,
             onFilterShortAsciiMaxLengthChange = viewModel::updateInputTextFilterShortAsciiMaxLength,
+            onUploadIntervalChange = viewModel::updateInputTextUploadIntervalMin,
+            onTriggerNow = viewModel::triggerInputTextUploadNow,
             onOpenAccessibilitySettings = {
                 try {
                     context.startActivity(
@@ -307,6 +309,8 @@ private fun InputTextCard(
     onQuietMsChange: (Long) -> Unit,
     onFilterShortAsciiChange: (Boolean) -> Unit,
     onFilterShortAsciiMaxLengthChange: (Int) -> Unit,
+    onUploadIntervalChange: (Int) -> Unit,
+    onTriggerNow: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit
 ) {
     val context = LocalContext.current
@@ -435,8 +439,27 @@ private fun InputTextCard(
                 onQuietMsChange = onQuietMsChange
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = uiState.inputTextUploadIntervalMin.toString(),
+                onValueChange = { v ->
+                    v.toIntOrNull()?.let { onUploadIntervalChange(it) }
+                },
+                label = { Text(context.getString(R.string.input_text_upload_interval)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
 
+            Spacer(modifier = Modifier.height(12.dp))
+            TextButton(
+                onClick = onTriggerNow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(context.getString(R.string.input_text_test_now))
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
             OutlinedButton(
                 onClick = onOpenAccessibilitySettings,
                 modifier = Modifier.fillMaxWidth()
@@ -809,8 +832,8 @@ private fun PhoneWatcherCard(
     onEnabledChange: (Boolean) -> Unit,
     onPickDir: () -> Unit,
     onClearTreeUri: () -> Unit,
-    onPatternsChange: (String) -> Unit,
     onIntervalChange: (Int) -> Unit,
+    onTriggerNow: () -> Unit,
     onSave: () -> Unit,
     onFeedbackShown: () -> Unit
 ) {
@@ -872,7 +895,6 @@ private fun PhoneWatcherCard(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 只读展示所选目录（SAF 授权路径, 只看不可改）
                 Text(
                     text = context.getString(R.string.phone_watcher_selected) + ":",
                     style = MaterialTheme.typography.bodySmall,
@@ -894,16 +916,6 @@ private fun PhoneWatcherCard(
 
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedTextField(
-                    value = uiState.phoneWatchPatterns,
-                    onValueChange = onPatternsChange,
-                    label = { Text(context.getString(R.string.phone_watcher_patterns)) },
-                    placeholder = { Text("*.amr;*.m4a;*.mp3;*.aac;*.opus") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
                     value = uiState.phoneWatchInterval.toString(),
                     onValueChange = { v ->
                         v.toIntOrNull()?.let { onIntervalChange(it) }
@@ -915,13 +927,20 @@ private fun PhoneWatcherCard(
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
-                // 开关和目录是即时生效的，剩下的文本框（文件匹配 + 扫描间隔）走这个按钮。
                 ModuleSaveBar(
                     module = "PHONE_WATCHER",
                     uiState = uiState,
                     onSave = onSave,
                     onFeedbackShown = onFeedbackShown
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = onTriggerNow,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(context.getString(R.string.phone_watcher_trigger_now))
+                }
             }
         }
     }
@@ -932,6 +951,7 @@ private fun LocationSettingsCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
     onEnabledChange: (Boolean) -> Unit,
     onIntervalChange: (Int) -> Unit,
+    onTriggerNow: () -> Unit,
     onSave: () -> Unit,
     onFeedbackShown: () -> Unit
 ) {
@@ -983,6 +1003,13 @@ private fun LocationSettingsCard(
                     onSave = onSave,
                     onFeedbackShown = onFeedbackShown
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = onTriggerNow,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(context.getString(R.string.location_test_now))
+                }
             }
         }
     }

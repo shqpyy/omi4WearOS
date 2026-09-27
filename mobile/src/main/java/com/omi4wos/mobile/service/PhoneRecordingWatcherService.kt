@@ -187,7 +187,7 @@ class PhoneRecordingWatcherService : Service() {
 
                     scanOnce(config)
 
-                    val intervalSec = config.phoneWatcher.scanIntervalSec.coerceIn(15, 3600)
+                    val intervalSec = (config.phoneWatcher.scanIntervalMin * 60).coerceIn(15, 3600)
                     delay(intervalSec * 1000L)
                 } catch (e: Exception) {
                     Log.e(TAG, "Scan loop error", e)
@@ -199,9 +199,7 @@ class PhoneRecordingWatcherService : Service() {
 
     private suspend fun scanOnce(config: OmiConfig.Config) {
         val watcher = config.phoneWatcher
-        val patterns = watcher.filePatterns.split(';').mapNotNull { p ->
-            p.trim().removePrefix("*").ifEmpty { null }
-        }
+        val patterns = listOf("*.amr", "*.m4a", "*.mp3", "*.aac", "*.opus")
         if (patterns.isEmpty()) {
             Log.w(TAG, "No file patterns configured")
             WatcherStatus.update { it.copy(lastScanTime = System.currentTimeMillis(), lastError = "No file patterns configured") }

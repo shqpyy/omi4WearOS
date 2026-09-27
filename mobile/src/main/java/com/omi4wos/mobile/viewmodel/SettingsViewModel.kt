@@ -46,8 +46,7 @@ data class SettingsUiState(
     val phoneWatcherEnabled: Boolean = false,
     val phoneWatchDir: String = "",
     val phoneWatchTreeUri: String = "",
-    val phoneWatchPatterns: String = OmiConfig.DEFAULT_FILE_PATTERNS,
-    val phoneWatchInterval: Int = 60,
+    val phoneWatchInterval: Int = 1,
 
     // 定位上报
     val locationEnabled: Boolean = true,
@@ -59,10 +58,10 @@ data class SettingsUiState(
     // 输入文本采集
     val inputTextEnabled: Boolean = false,
     val inputTextUploadEnabled: Boolean = false,
-    /** 停止打字阈值（ms）；设置页以「秒」展示，范围 MIN_QUIET_MS..MAX_QUIET_MS */
     val inputTextQuietMs: Long = OmiConfig.DEFAULT_QUIET_MS,
     val inputTextFilterShortAscii: Boolean = false,
     val inputTextFilterShortAsciiMaxLength: Int = 3,
+    val inputTextUploadIntervalMin: Int = 30,
 
     // 语言（system / en / zh-CN）
     val language: String = OmiConfig.DEFAULT_LANGUAGE,
@@ -108,8 +107,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 phoneWatcherEnabled = config.phoneWatcher.enabled,
                 phoneWatchDir = config.phoneWatcher.watchDir,
                 phoneWatchTreeUri = config.phoneWatcher.treeUri,
-                phoneWatchPatterns = config.phoneWatcher.filePatterns,
-                phoneWatchInterval = config.phoneWatcher.scanIntervalSec,
+                phoneWatchInterval = config.phoneWatcher.scanIntervalMin,
                 locationEnabled = config.location.enabled,
                 locationIntervalMin = config.location.intervalMin,
                 callPauseEnabled = config.callPause.enabled,
@@ -117,6 +115,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 inputTextUploadEnabled = config.inputText.uploadEnabled,
                 inputTextQuietMs = config.inputText.quietMs,
                 inputTextFilterShortAscii = config.inputText.filterShortAscii,
+                inputTextFilterShortAsciiMaxLength = config.inputText.filterShortAsciiMaxLength,
+                inputTextUploadIntervalMin = config.inputText.uploadIntervalMin,
                 language = config.language
             )
         }
@@ -206,11 +206,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         // 因此立即保存，用户不需要再去找保存按钮。
         viewModelScope.launch { persist() }
     }
-    fun updatePhoneWatchPatterns(value: String) {
-        _uiState.value = _uiState.value.copy(phoneWatchPatterns = value)
-    }
     fun updatePhoneWatchInterval(value: Int) {
-        _uiState.value = _uiState.value.copy(phoneWatchInterval = value)
+        val min = value.coerceIn(1, 60)
+        _uiState.value = _uiState.value.copy(phoneWatchInterval = min)
     }
 
     // ---- 定位上报 ----
@@ -291,12 +289,50 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { persist() }
     }
 
+    fun updateInputTextUploadIntervalMin(value: Int) {
+        val min = value.coerceIn(1, 120)
+        _uiState.value = _uiState.value.copy(inputTextUploadIntervalMin = min)
+        viewModelScope.launch { persist() }
+    }
+
+    fun triggerPhoneWatcherNow() {
+        viewModelScope.launch {
+            try {
+                val context = getApplication<Application>()
+                PhoneRecordingWatcherService.start(context)
+                RecordingWatcherWorker.schedule(context)
+            } catch (e: Exception) {
+                Log.e(TAG, "triggerPhoneWatcherNow failed", e)
+            }
+        }
+    }
+
+    fun triggerLocationNow() {
+        viewModelScope.launch {
+            try {
+                LocationUploader.uploadNow(getApplication())
+            } catch (e: Exception) {
+                Log.e(TAG, "triggerLocationNow failed", e)
+            }
+        }
+    }
+
+    fun triggerInputTextUploadNow() {
+        viewModelScope.launch {
+            try {
+                val context = getApplication<Application>()
+                val result = com.omi4wos.mobile.service.runInputTextUpload(context)
+                Log.i(TAG, "triggerInputTextUploadNow result: $result")
+            } catch (e: Exception) {
+                Log.e(TAG, "triggerInputTextUploadNow failed", e)
+            }
+        }
+    }
+
     // ---- 保存 ----
     /**
      * 把当前 UI 状态组装成一份完整配置。
-     *
      * 抽成函数的原因：保存已从「一个全局按钮」拆成「每个模块各保存各的」，
-     * 若每处各拼一遍 Config，一旦新增字段就很容易漏掉某个模块 ——
      * 那种「界面上改了但没存进去」的 bug 最难查（重启后静默还原）。
      * 所有模块共用这一份组装逻辑，保证字段不遗漏。
      */
@@ -319,8 +355,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 enabled = state.phoneWatcherEnabled,
                 watchDir = state.phoneWatchDir.trim(),
                 treeUri = state.phoneWatchTreeUri.trim(),
-                filePatterns = state.phoneWatchPatterns.trim(),
-                scanIntervalSec = state.phoneWatchInterval.coerceIn(15, 3600)
+                scanIntervalMin = state.phoneWatchInterval.coerceIn(1, 60)
             ),
             location = OmiConfig.LocationConfig(
                 enabled = state.locationEnabled,
@@ -336,7 +371,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     OmiConfig.MIN_QUIET_MS, OmiConfig.MAX_QUIET_MS
                 ),
                 filterShortAscii = state.inputTextFilterShortAscii,
-                filterShortAsciiMaxLength = state.inputTextFilterShortAsciiMaxLength.coerceIn(1, 20)
+                filterShortAsciiMaxLength = state.inputTextFilterShortAsciiMaxLength.coerceIn(1, 10),
+                uploadIntervalMin = state.inputTextUploadIntervalMin.coerceIn(1, 120)
             ),
             language = state.language
         )
