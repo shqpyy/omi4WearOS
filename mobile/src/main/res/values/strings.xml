@@ -47,7 +47,7 @@
     <string name='phone_watcher_or_path'>Or enter path manually (lower priority than SAF)</string>
     <string name='phone_watcher_dir'>Watch Directory Path</string>
     <string name='phone_watcher_patterns'>File Patterns (semicolon-separated)</string>
-    <string name='phone_watcher_interval'>Scan Interval (seconds, 15-3600)</string>
+    <string name='phone_watcher_interval'>Scan Interval</string>
     <string name='phone_watcher_saf_hint'>Open this page from the app to grant permission</string>
     <string name='keepalive_title'>Keep-Alive Settings</string>
     <string name='keepalive_desc'>Android aggressively kills background services. For 24/7 watcher, whitelist this app.</string>

@@ -124,7 +124,7 @@ class OmiConfig(private val context: Context) {
 
         /** 停止打字阈值范围（ms）与默认值；设置页以「秒」展示 */
         const val MIN_QUIET_MS = 1000L
-        const val MAX_QUIET_MS = 60000L
+        const val MAX_QUIET_MS = 10000L
         const val DEFAULT_QUIET_MS = 5000L
 
         // Storage method

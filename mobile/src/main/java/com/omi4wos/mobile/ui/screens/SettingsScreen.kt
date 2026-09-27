@@ -228,11 +228,14 @@ fun SettingsScreen(
 }
 
 /**
- * 停止打字阈值滑块。
+ * 停止打字阈值：步进器（1–10 秒），内部存毫秒。
  *
- * 值以「秒」呈现（1–60s），内部存毫秒。为什么做成可调项：这个数字取决于
- * 个人的打字/思考节奏，以前改一次要重编一次 APK、重新装包，成本太高。
- * 无障碍服务每次事件都现读配置，所以拖动后**立刻生效**，不必重启服务。
+ * 为什么做成可调项：这个数字取决于个人的打字/思考节奏，以前改一次要重编
+ * 一次 APK、重新装包，成本太高。无障碍服务每次事件都现读配置，所以**改完
+ * 立刻生效**，不必重启服务。
+ *
+ * 2026-09-27：由滑块改为 +/- 步进器（对齐「短 ASCII 最大长度」样式）。
+ * 实际可用区间只有 1–10 秒，滑块量程过宽不好精调。
  */
 /**
  * 通用的「分钟」滑块。
@@ -297,12 +300,10 @@ private fun QuietMsSlider(
     onQuietMsChange: (Long) -> Unit
 ) {
     val context = LocalContext.current
-    // 本地 state 承接拖动过程，抬手才写配置，避免每拖一格写一次 DataStore
-    val minSec = (OmiConfig.MIN_QUIET_MS / 1000L).toFloat()
-    val maxSec = (OmiConfig.MAX_QUIET_MS / 1000L).toFloat()
-    var sliderSec by remember(quietMs) {
-        mutableStateOf((quietMs / 1000L).toFloat().coerceIn(minSec, maxSec))
-    }
+    // 秒为单位的步进器：范围取配置上下界（当前 1–10 秒），点击即写配置。
+    val minSec = (OmiConfig.MIN_QUIET_MS / 1000L).toInt()
+    val maxSec = (OmiConfig.MAX_QUIET_MS / 1000L).toInt()
+    val curSec = (quietMs / 1000L).toInt().coerceIn(minSec, maxSec)
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -320,23 +321,30 @@ private fun QuietMsSlider(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            IconButton(
+                onClick = {
+                    val next = (curSec - 1).coerceIn(minSec, maxSec)
+                    if (next != curSec) onQuietMsChange(next * 1000L)
+                },
+                enabled = enabled && curSec > minSec
+            ) {
+                Text("-", fontWeight = FontWeight.Bold)
+            }
             Text(
-                text = "%.0f 秒".format(sliderSec),
+                text = "$curSec",
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = if (enabled) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
+                modifier = Modifier.padding(horizontal = 12.dp)
             )
+            IconButton(
+                onClick = {
+                    val next = (curSec + 1).coerceIn(minSec, maxSec)
+                    if (next != curSec) onQuietMsChange(next * 1000L)
+                },
+                enabled = enabled && curSec < maxSec
+            ) {
+                Text("+", fontWeight = FontWeight.Bold)
+            }
         }
-        Slider(
-            value = sliderSec,
-            onValueChange = { sliderSec = it },
-            onValueChangeFinished = { onQuietMsChange((sliderSec * 1000L).toLong()) },
-            valueRange = minSec..maxSec,
-            steps = ((maxSec - minSec).toInt() - 1).coerceAtLeast(0),
-            enabled = enabled,
-            modifier = Modifier.fillMaxWidth()
-        )
     }
 }
 

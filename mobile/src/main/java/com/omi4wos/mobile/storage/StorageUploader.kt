@@ -41,6 +41,21 @@ interface StorageUploader {
     ): Boolean
 
     /**
+     * 查服务端当天是否已有同名文件（内容寻址预检）。
+     *
+     * 用途：通话录音文件名天然唯一（含秒级时间戳），上传前先问一句即可
+     * 避免「卸载重装 App 后 processedFiles 丢失 → 当天录音全部重传」。
+     *
+     * 默认实现返回 false（当作"不存在"）：
+     * - 本地/S3 后端没有这个概念，语义正确（该传就传）
+     * - HTTP 后端网络异常时也必须返回 false —— 宁可白传一次，也不能漏传
+     *
+     * @param uploadName 目标文件名（与 [upload] 的 uploadName 一致）
+     * @return true = 服务端已有，可跳过；false = 需上传
+     */
+    suspend fun checkExists(uploadName: String): Boolean = false
+
+    /**
      * 上传一批输入文本事件。
      *
      * 服务端契约（audio_server.py `/input-text`）：

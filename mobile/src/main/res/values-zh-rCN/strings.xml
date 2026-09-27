@@ -47,7 +47,7 @@
     <string name='phone_watcher_or_path'>或手动输入路径（优先级低于 SAF）</string>
     <string name='phone_watcher_dir'>监听目录路径</string>
     <string name='phone_watcher_patterns'>文件扩展名（分号分隔）</string>
-    <string name='phone_watcher_interval'>扫描间隔（秒，15-3600）</string>
+    <string name='phone_watcher_interval'>扫描间隔</string>
     <string name='phone_watcher_saf_hint'>在 App 内打开此页面授权</string>
     <string name='keepalive_title'>保活设置</string>
     <string name='keepalive_desc'>Android 会杀掉后台服务。要 24/7 监听，请把本 App 加入白名单。</string>

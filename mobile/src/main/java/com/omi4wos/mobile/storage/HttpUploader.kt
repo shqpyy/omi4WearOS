@@ -109,6 +109,7 @@ class HttpUploader(
         try {
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
+                .addFormDataPart("source", source)
                 .addFormDataPart(
                     "file",
                     uploadName,
@@ -175,6 +176,69 @@ class HttpUploader(
         } catch (e: Exception) {
             Log.e(TAG, "Connection test failed", e)
             Pair(false, "Error: ${e.message}")
+        }
+    }
+
+    /**
+     * 查服务端当天是否已有同名文件。
+     *
+     * POST {uploadUrl 派生}/upload-audio/check，body {"name": uploadName}，带 X-API-Key。
+     * 服务端在 raw/<当天>/ 下找同名文件，返回 {"exists": true/false}。
+     *
+     * 任何异常（未配置 URL / 网络失败 / 解析失败）一律返回 false：
+     * 预检失败必须当作「不存在」，宁可白传一次，也绝不能漏传。
+     */
+    override suspend fun checkExists(uploadName: String): Boolean = withContext(Dispatchers.IO) {
+        if (!config.isConfigured) {
+            Log.w(TAG, "uploadUrl not configured — checkExists returns false (will upload)")
+            return@withContext false
+        }
+        if (uploadName.isBlank()) return@withContext false
+        val url = checkEndpoint() ?: run {
+            Log.w(TAG, "Cannot derive /upload-audio/check endpoint from ${config.uploadUrl}")
+            return@withContext false
+        }
+        try {
+            val body = JSONObject()
+                .put("name", uploadName)
+                .toString()
+                .toRequestBody("application/json; charset=utf-8".toMediaType())
+            val requestBuilder = Request.Builder()
+                .url(url)
+                .post(body)
+            if (config.uploadApiKey.isNotBlank()) {
+                requestBuilder.header("X-API-Key", config.uploadApiKey)
+            }
+            val response = client.newCall(requestBuilder.build()).execute()
+            val status = response.code
+            val respBody = response.body?.string()
+            response.close()
+            if (status !in 200..299) {
+                Log.w(TAG, "checkExists failed ($status): $respBody — treat as not-exists")
+                return@withContext false
+            }
+            val exists = try {
+                JSONObject(respBody ?: "{}").optBoolean("exists", false)
+            } catch (_: Exception) {
+                false
+            }
+            Log.i(TAG, "checkExists($uploadName) -> $exists")
+            exists
+        } catch (e: Exception) {
+            Log.e(TAG, "checkExists exception for $uploadName — treat as not-exists", e)
+            false
+        }
+    }
+
+    /** 从 uploadUrl 派生 /upload-audio/check 端点；无法解析时返回 null。 */
+    private fun checkEndpoint(): String? {
+        return try {
+            val base = android.net.Uri.parse(config.uploadUrl)
+            if (base?.host.isNullOrBlank()) return null
+            val port = if (base.port > 0) ":${base.port}" else ""
+            "${base.scheme}://${base.host}$port/upload-audio/check"
+        } catch (_: Exception) {
+            null
         }
     }
 

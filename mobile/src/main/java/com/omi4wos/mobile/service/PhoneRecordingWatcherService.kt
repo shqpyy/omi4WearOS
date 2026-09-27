@@ -289,9 +289,28 @@ class PhoneRecordingWatcherService : Service() {
         val uploader = StorageUploader.create(applicationContext)
         var okCount = 0
         var failCount = 0
+        var skippedAsDuplicate = 0
         for ((name, data) in newFiles) {
+            // 预检：服务端当天已有同名文件 → 跳过（不占流量；重装 App 后
+            // processedFiles 丢失时靠这层兜底，避免当天录音被整个重传）。
+            // 预检异常一律当作"不存在"，宁可白传一次也不能漏传。
             try {
-                val uploadName = "phone_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}_${name}"
+                if (uploader.checkExists(name)) {
+                    processedFiles.add(name)
+                    saveProcessedFiles()
+                    skippedAsDuplicate++
+                    Log.i(TAG, "Server already has $name — skip upload")
+                    continue
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "checkExists failed for $name — will upload", e)
+            }
+            try {
+                // 2026-09-27：上传名直接用原始文件名（含「对方姓名@号码_时间戳」）。
+                // 服务端 source=phone 分支按此名存盘+去重，transcribe.py 的正则
+                // （CALL_RE）可直接解析出通话对象与通话时间；不再加 phone_ 前缀，
+                // 否则正则匹配不上、通话对象又丢了。
+                val uploadName = name
                 val ok = uploader.upload(
                     audioData = data,
                     uploadName = uploadName,
