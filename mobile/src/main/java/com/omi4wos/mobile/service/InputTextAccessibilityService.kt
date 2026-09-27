@@ -393,7 +393,7 @@ class InputTextAccessibilityService : AccessibilityService() {
                     runCatching { root.findAccessibilityNodeInfosByViewId(viewId) }.getOrNull()
                 } else null ?: continue
 
-                for (node in nodes) {
+                nodes?.forEach { node ->
                     val text = node.text?.toString()?.trim()
                     if (!text.isNullOrEmpty() && text.length in 2..40) {
                         runCatching { node.recycle() }
@@ -425,3 +425,4 @@ class InputTextAccessibilityService : AccessibilityService() {
         }
     }
 }
+
