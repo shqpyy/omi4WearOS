@@ -121,43 +121,30 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // === 1. 存储方案选择 ===
-        StorageMethodCard(
+        // === 1. 储存方式（方案 A：单选 + 对应配置合并为同一张卡片）===
+        StorageConfigCard(
             uiState = uiState,
-            onMethodSelected = viewModel::updateStorageMethod
+            onMethodChange = viewModel::updateStorageMethod,
+            onOutputDirChange = viewModel::updateLocalOutputDir,
+            onUrlChange = viewModel::updateHttpUploadUrl,
+            onApiKeyChange = viewModel::updateHttpApiKey,
+            onTest = viewModel::testConnection,
+            onEndpointChange = viewModel::updateS3Endpoint,
+            onBucketChange = viewModel::updateS3Bucket,
+            onAccessKeyChange = viewModel::updateS3AccessKey,
+            onSecretKeyChange = viewModel::updateS3SecretKey,
+            onRegionChange = viewModel::updateS3Region,
+            onSave = {
+                viewModel.saveModule(
+                    when (uiState.storageMethod) {
+                        OmiConfig.StorageMethod.LOCAL_FILE -> "LOCAL"
+                        OmiConfig.StorageMethod.HTTP -> "HTTP"
+                        OmiConfig.StorageMethod.S3 -> "S3"
+                    }
+                )
+            },
+            onFeedbackShown = viewModel::consumeSaveFeedback
         )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // === 2. 对应方案的配置项 ===
-        when (uiState.storageMethod) {
-            OmiConfig.StorageMethod.LOCAL_FILE -> LocalFileConfigCard(
-                uiState = uiState,
-                onOutputDirChange = viewModel::updateLocalOutputDir,
-                onSave = { viewModel.saveModule("LOCAL") },
-                onFeedbackShown = viewModel::consumeSaveFeedback
-            )
-            OmiConfig.StorageMethod.HTTP -> HttpConfigCard(
-                uiState = uiState,
-                onUrlChange = viewModel::updateHttpUploadUrl,
-                onKeyChange = viewModel::updateHttpApiKey,
-                onSave = { viewModel.saveModule("HTTP") },
-                onTest = viewModel::testConnection,
-                onFeedbackShown = viewModel::consumeSaveFeedback
-            )
-            OmiConfig.StorageMethod.S3 -> S3ConfigCard(
-                uiState = uiState,
-                onEndpointChange = viewModel::updateS3Endpoint,
-                onBucketChange = viewModel::updateS3Bucket,
-                onAccessKeyChange = viewModel::updateS3AccessKey,
-                onSecretKeyChange = viewModel::updateS3SecretKey,
-                onRegionChange = viewModel::updateS3Region,
-                onSave = { viewModel.saveModule("S3") },
-                onFeedbackShown = viewModel::consumeSaveFeedback
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -170,9 +157,7 @@ fun SettingsScreen(
             },
             onClearTreeUri = { viewModel.updatePhoneWatchTreeUri("") },
             onIntervalChange = viewModel::updatePhoneWatchInterval,
-            onTriggerNow = viewModel::triggerPhoneWatcherNow,
-            onSave = { viewModel.saveModule("PHONE_WATCHER") },
-            onFeedbackShown = viewModel::consumeSaveFeedback
+            onTriggerNow = viewModel::triggerPhoneWatcherNow
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -182,9 +167,7 @@ fun SettingsScreen(
             uiState = uiState,
             onEnabledChange = viewModel::updateLocationEnabled,
             onIntervalChange = viewModel::updateLocationInterval,
-            onTriggerNow = viewModel::triggerLocationNow,
-            onSave = { viewModel.saveModule("LOCATION") },
-            onFeedbackShown = viewModel::consumeSaveFeedback
+            onTriggerNow = viewModel::triggerLocationNow
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -251,6 +234,62 @@ fun SettingsScreen(
  * 个人的打字/思考节奏，以前改一次要重编一次 APK、重新装包，成本太高。
  * 无障碍服务每次事件都现读配置，所以拖动后**立刻生效**，不必重启服务。
  */
+/**
+ * 通用的「分钟」滑块。
+ *
+ * 交互规则（2026-09-27 定）：拖动过程只更新本地 state，**松手才写配置**，
+ * 避免每拖一格写一次 DataStore。写下去就等于已保存，因此不再配保存按钮。
+ */
+@Composable
+private fun MinuteSlider(
+    label: String,
+    desc: String,
+    valueMin: Int,
+    range: IntRange,
+    enabled: Boolean = true,
+    onValueChange: (Int) -> Unit
+) {
+    val minV = range.first.toFloat()
+    val maxV = range.last.toFloat()
+    var sliderValue by remember(valueMin) {
+        mutableStateOf(valueMin.coerceIn(range.first, range.last).toFloat())
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = label, style = MaterialTheme.typography.bodyMedium)
+                if (desc.isNotEmpty()) {
+                    Text(
+                        text = desc,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Text(
+                text = "${sliderValue.toInt()} 分钟",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (enabled) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Slider(
+            value = sliderValue,
+            onValueChange = { sliderValue = it },
+            onValueChangeFinished = { onValueChange(sliderValue.toInt()) },
+            valueRange = minV..maxV,
+            steps = ((maxV - minV).toInt() - 1).coerceAtLeast(0),
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
 @Composable
 private fun QuietMsSlider(
     quietMs: Long,
@@ -440,15 +479,14 @@ private fun InputTextCard(
             )
 
             Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = uiState.inputTextUploadIntervalMin.toString(),
-                onValueChange = { v ->
-                    v.toIntOrNull()?.let { onUploadIntervalChange(it) }
-                },
-                label = { Text(context.getString(R.string.input_text_upload_interval)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            // 上传间隔：滑块（分钟），松手即保存，不再需要保存按钮。
+            MinuteSlider(
+                label = context.getString(R.string.input_text_upload_interval),
+                desc = "",
+                valueMin = uiState.inputTextUploadIntervalMin,
+                range = 1..120,
+                enabled = uiState.inputTextUploadEnabled,
+                onValueChange = onUploadIntervalChange
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -585,11 +623,22 @@ private fun initialTreeDocumentUri(treeUri: String): Uri? {
 }
 
 @Composable
-private fun StorageMethodCard(
+private fun StorageConfigCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
-    onMethodSelected: (OmiConfig.StorageMethod) -> Unit
+    onOutputDirChange: (String) -> Unit,
+    onUrlChange: (String) -> Unit,
+    onApiKeyChange: (String) -> Unit,
+    onTest: () -> Unit,
+    onMethodChange: (OmiConfig.StorageMethod) -> Unit,
+    onEndpointChange: (String) -> Unit,
+    onBucketChange: (String) -> Unit,
+    onAccessKeyChange: (String) -> Unit,
+    onSecretKeyChange: (String) -> Unit,
+    onRegionChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onFeedbackShown: () -> Unit
 ) {
-            val context = LocalContext.current
+    val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -603,6 +652,7 @@ private fun StorageMethodCard(
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
+            // 方案 A：单选与对应配置同卡，切换单选即切换下方内容
             OmiConfig.StorageMethod.values().forEach { method ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -610,7 +660,7 @@ private fun StorageMethodCard(
                 ) {
                     RadioButton(
                         selected = uiState.storageMethod == method,
-                        onClick = { onMethodSelected(method) }
+                        onClick = { onMethodChange(method) }
                     )
                     Text(
                         text = when (method) {
@@ -628,201 +678,151 @@ private fun StorageMethodCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        }
-    }
-}
 
-@Composable
-private fun LocalFileConfigCard(
-    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
-    onOutputDirChange: (String) -> Unit,
-    onSave: () -> Unit,
-    onFeedbackShown: () -> Unit
-) {
-            val context = LocalContext.current
-    ConfigCard(title = context.getString(R.string.local_config_title)) {
-        OutlinedTextField(
-            value = uiState.localOutputDir,
-            onValueChange = onOutputDirChange,
-            label = { Text(context.getString(R.string.local_output_dir)) },
-            placeholder = { Text("/storage/emulated/0/omi4wos") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = context.getString(R.string.local_files_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        ModuleSaveBar(
-            module = "LOCAL",
-            uiState = uiState,
-            onSave = onSave,
-            onFeedbackShown = onFeedbackShown
-        )
-    }
-}
-
-@Composable
-private fun HttpConfigCard(
-    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
-    onUrlChange: (String) -> Unit,
-    onKeyChange: (String) -> Unit,
-    onSave: () -> Unit,
-    onTest: () -> Unit,
-    onFeedbackShown: () -> Unit
-) {
-            val context = LocalContext.current
-    ConfigCard(title = context.getString(R.string.http_config_title)) {
-        OutlinedTextField(
-            value = uiState.httpUploadUrl,
-            onValueChange = onUrlChange,
-            label = { Text(context.getString(R.string.http_upload_url)) },
-            placeholder = { Text(context.getString(R.string.http_upload_url_hint)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        var showHttpKey by remember { mutableStateOf(false) }
-        OutlinedTextField(
-            value = uiState.httpApiKey,
-            onValueChange = onKeyChange,
-            label = { Text(context.getString(R.string.http_api_key)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            visualTransformation = if (showHttpKey) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            trailingIcon = {
-                IconButton(onClick = { showHttpKey = !showHttpKey }) {
-                    Icon(
-                        imageVector = if (showHttpKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                        contentDescription = if (showHttpKey) "Hidden" else "Visible"
+            Spacer(modifier = Modifier.height(16.dp))
+            when (uiState.storageMethod) {
+                OmiConfig.StorageMethod.LOCAL_FILE -> {
+                    // 本地目录：文本框输入即改草稿，点「保存」落盘（LOCAL 原模块名保持回显匹配）
+                    OutlinedTextField(
+                        value = uiState.localOutputDir,
+                        onValueChange = onOutputDirChange,
+                        label = { Text(context.getString(R.string.local_output_dir)) },
+                        placeholder = { Text("/storage/emulated/0/omi4wos") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = context.getString(R.string.local_files_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                OmiConfig.StorageMethod.HTTP -> {
+                    OutlinedTextField(
+                        value = uiState.httpUploadUrl,
+                        onValueChange = onUrlChange,
+                        label = { Text(context.getString(R.string.http_upload_url)) },
+                        placeholder = { Text(context.getString(R.string.http_upload_url_hint)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    var showHttpKey by remember { mutableStateOf(false) }
+                    OutlinedTextField(
+                        value = uiState.httpApiKey,
+                        onValueChange = onApiKeyChange,
+                        label = { Text(context.getString(R.string.http_api_key)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = if (showHttpKey) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { showHttpKey = !showHttpKey }) {
+                                Icon(
+                                    imageVector = if (showHttpKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = if (showHttpKey) "Hidden" else "Visible"
+                                )
+                            }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "multipart/form-data POST, field name \"file\".",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    // 「测试连接」只测这套 HTTP 参数（上传地址 + API Key），所以它属于这个分支，
+                    // 不属于页面顶部 —— 挂全局时语义是错的。
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onTest,
+                            enabled = !uiState.isTesting,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                if (uiState.isTesting) context.getString(R.string.testing)
+                                else context.getString(R.string.test_connection)
+                            )
+                        }
+                        Button(
+                            onClick = onSave,
+                            enabled = !uiState.isSaving,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(context.getString(R.string.save))
+                        }
+                    }
+                    uiState.testResult?.let { result ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = result,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (result.startsWith("OK")) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+                OmiConfig.StorageMethod.S3 -> {
+                    Text(
+                        text = "Works with: Tencent COS / Cloudflare R2 / AWS S3 / MinIO / Aliyun OSS / Backblaze B2.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = uiState.s3Endpoint,
+                        onValueChange = onEndpointChange,
+                        label = { Text(context.getString(R.string.s3_endpoint)) },
+                        placeholder = { Text(context.getString(R.string.s3_endpoint_hint)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = uiState.s3Bucket,
+                        onValueChange = onBucketChange,
+                        label = { Text(context.getString(R.string.s3_bucket)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = uiState.s3AccessKey,
+                        onValueChange = onAccessKeyChange,
+                        label = { Text(context.getString(R.string.s3_access_key)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = uiState.s3SecretKey,
+                        onValueChange = onSecretKeyChange,
+                        label = { Text(context.getString(R.string.s3_secret_key)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = uiState.s3Region,
+                        onValueChange = onRegionChange,
+                        label = { Text(context.getString(R.string.s3_region)) },
+                        placeholder = { Text(context.getString(R.string.s3_region_hint)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
                 }
             }
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "multipart/form-data POST, field name \"file\".",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        // 「测试连接」只测这套 HTTP 参数（上传地址 + API Key），所以它属于这张卡片，
-        // 不属于页面顶部 —— 挂全局时语义是错的。
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = onTest,
-                enabled = !uiState.isTesting,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    if (uiState.isTesting) context.getString(R.string.testing)
-                    else context.getString(R.string.test_connection)
-                )
-            }
-            Button(
-                onClick = onSave,
-                enabled = !uiState.isSaving,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(context.getString(R.string.save))
-            }
         }
-        uiState.testResult?.let { result ->
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = result,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (result.startsWith("OK")) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.error
-            )
-        }
-        ModuleSaveFeedback(
-            module = "HTTP",
-            uiState = uiState,
-            onFeedbackShown = onFeedbackShown
-        )
-    }
-}
-
-@Composable
-private fun S3ConfigCard(
-    uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
-    onEndpointChange: (String) -> Unit,
-    onBucketChange: (String) -> Unit,
-    onAccessKeyChange: (String) -> Unit,
-    onSecretKeyChange: (String) -> Unit,
-    onRegionChange: (String) -> Unit,
-    onSave: () -> Unit,
-    onFeedbackShown: () -> Unit
-) {
-            val context = LocalContext.current
-    ConfigCard(title = context.getString(R.string.s3_config_title)) {
-        Text(
-            text = "Works with: Tencent COS / Cloudflare R2 / AWS S3 / MinIO / Aliyun OSS / Backblaze B2.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
-            value = uiState.s3Endpoint,
-            onValueChange = onEndpointChange,
-            label = { Text(context.getString(R.string.s3_endpoint)) },
-            placeholder = { Text(context.getString(R.string.s3_endpoint_hint)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
-            value = uiState.s3Bucket,
-            onValueChange = onBucketChange,
-            label = { Text(context.getString(R.string.s3_bucket)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
-            value = uiState.s3AccessKey,
-            onValueChange = onAccessKeyChange,
-            label = { Text(context.getString(R.string.s3_access_key)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
-            value = uiState.s3SecretKey,
-            onValueChange = onSecretKeyChange,
-            label = { Text(context.getString(R.string.s3_secret_key)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
-            value = uiState.s3Region,
-            onValueChange = onRegionChange,
-            label = { Text(context.getString(R.string.s3_region)) },
-            placeholder = { Text(context.getString(R.string.s3_region_hint)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        ModuleSaveBar(
-            module = "S3",
-            uiState = uiState,
-            onSave = onSave,
-            onFeedbackShown = onFeedbackShown
-        )
     }
 }
 
@@ -833,9 +833,7 @@ private fun PhoneWatcherCard(
     onPickDir: () -> Unit,
     onClearTreeUri: () -> Unit,
     onIntervalChange: (Int) -> Unit,
-    onTriggerNow: () -> Unit,
-    onSave: () -> Unit,
-    onFeedbackShown: () -> Unit
+    onTriggerNow: () -> Unit
 ) {
             val context = LocalContext.current
     Card(
@@ -915,23 +913,14 @@ private fun PhoneWatcherCard(
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = uiState.phoneWatchInterval.toString(),
-                    onValueChange = { v ->
-                        v.toIntOrNull()?.let { onIntervalChange(it) }
-                    },
-                    label = { Text(context.getString(R.string.phone_watcher_interval)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-                ModuleSaveBar(
-                    module = "PHONE_WATCHER",
-                    uiState = uiState,
-                    onSave = onSave,
-                    onFeedbackShown = onFeedbackShown
+                // 扫描间隔：滑块（分钟），松手即保存，移除模块保存按钮。
+                MinuteSlider(
+                    label = context.getString(R.string.phone_watcher_interval),
+                    desc = "",
+                    valueMin = uiState.phoneWatchInterval,
+                    range = 1..60,
+                    enabled = uiState.phoneWatcherEnabled,
+                    onValueChange = onIntervalChange
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -951,9 +940,7 @@ private fun LocationSettingsCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
     onEnabledChange: (Boolean) -> Unit,
     onIntervalChange: (Int) -> Unit,
-    onTriggerNow: () -> Unit,
-    onSave: () -> Unit,
-    onFeedbackShown: () -> Unit
+    onTriggerNow: () -> Unit
 ) {
     val context = LocalContext.current
     Card(
@@ -986,22 +973,14 @@ private fun LocationSettingsCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = uiState.locationIntervalMin.toString(),
-                    onValueChange = { v ->
-                        v.toIntOrNull()?.let { onIntervalChange(it) }
-                    },
-                    label = { Text(context.getString(R.string.location_interval)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                ModuleSaveBar(
-                    module = "LOCATION",
-                    uiState = uiState,
-                    onSave = onSave,
-                    onFeedbackShown = onFeedbackShown
+                // 上报间隔：滑块（分钟），松手即保存，移除模块保存按钮。
+                MinuteSlider(
+                    label = context.getString(R.string.location_interval),
+                    desc = "",
+                    valueMin = uiState.locationIntervalMin,
+                    range = 1..60,
+                    enabled = uiState.locationEnabled,
+                    onValueChange = onIntervalChange
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 TextButton(

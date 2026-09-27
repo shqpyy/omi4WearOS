@@ -209,6 +209,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun updatePhoneWatchInterval(value: Int) {
         val min = value.coerceIn(1, 60)
         _uiState.value = _uiState.value.copy(phoneWatchInterval = min)
+        // 滑块松手后立即落盘 —— 与定位/输入文本保持一致，不再依赖模块保存按钮。
+        viewModelScope.launch { persist() }
     }
 
     // ---- 定位上报 ----
@@ -226,7 +228,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
     fun updateLocationInterval(value: Int) {
-        val min = value.coerceIn(1, 1440)
+        // 滑块上限 60 分钟（UI 与落盘保持一致，不再允许文本框时代的 1440）
+        val min = value.coerceIn(1, 60)
         _uiState.value = _uiState.value.copy(locationIntervalMin = min)
         viewModelScope.launch {
             persist()
@@ -359,7 +362,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             ),
             location = OmiConfig.LocationConfig(
                 enabled = state.locationEnabled,
-                intervalMin = state.locationIntervalMin.coerceIn(1, 1440)
+                intervalMin = state.locationIntervalMin.coerceIn(1, 60)
             ),
             callPause = OmiConfig.CallPauseConfig(
                 enabled = state.callPauseEnabled
