@@ -227,6 +227,7 @@ class PhoneRecordingWatcherService : Service() {
             if (watcher.treeUri.isNotBlank()) {
                 // SAF 路径
                 val treeUri = Uri.parse(watcher.treeUri)
+                val safDirCache = HashMap<String, String>()   // displayName -> documentId
                 val children = contentResolver.query(
                     DocumentsContract.buildChildDocumentsUriUsingTree(
                         treeUri,
@@ -234,26 +235,45 @@ class PhoneRecordingWatcherService : Service() {
                     ),
                     arrayOf(
                         DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                        DocumentsContract.Document.COLUMN_LAST_MODIFIED
+                        DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID
                     ),
                     null, null, null
                 )
                 children?.use { c ->
                     val nameIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
                     val modIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+                    val docIdIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                    var rows = 0
+                    var extMatched = 0
                     while (c.moveToNext()) {
+                        rows++
                         val name = if (nameIdx >= 0) c.getString(nameIdx) else continue
                         if (!matchesPatterns(name, patterns)) continue
+                        extMatched++
+                        // 2026-09-28 修复：一次性建好 name->documentId 索引。
+                        // 原 readFromSaf() 每读一个文件都重新列一遍整个目录（O(n²)），
+                        // 目录累积到 5756 个文件后每轮扫描 33 万次游标移动，必然失败。
+                        if (docIdIdx >= 0) safDirCache[name] = c.getString(docIdIdx)
                         val lastMod = if (modIdx >= 0) c.getLong(modIdx) else 0L
                         // 只处理当天的文件, 历史录音不传; lastMod<=0 表示时间未知, 保守视为当天
                         if (lastMod > 0L && lastMod < todayStart) continue
                         scannedToday++
                         if (name !in processedFiles) {
-                            val data = readFromSaf(treeUri, name)
+                            val data = readFromSafDirect(treeUri, safDirCache[name], name)
                             if (data != null) newFiles.add(name to data)
+                            else Log.w(TAG, "readFromSafDirect returned null for " + name)
                         }
                     }
                     if (nameIdx < 0) errorMsg = "SAF query returned no columns (permission not granted?)"
+                    // 落盘诊断（logcat 256KiB 环形缓冲会被系统日志冲爆，只有 app.log 可靠）
+                    AppLog.i(
+                        TAG,
+                        "SAF 扫描: rows=" + rows + " m4a匹配=" + extMatched +
+                            " 当天=" + scannedToday + " newFiles=" + newFiles.size +
+                            " todayStart=" + todayStart +
+                            " nameIdx=" + nameIdx + " modIdx=" + modIdx + " docIdIdx=" + docIdIdx
+                    )
                 }
             } else if (watcher.watchDir.isNotBlank()) {
                 // File 路径
@@ -362,9 +382,35 @@ class PhoneRecordingWatcherService : Service() {
 
     private fun matchesPatterns(name: String, exts: List<String>): Boolean {
         val lower = name.lowercase()
-        return exts.any { ext -> lower.endsWith(ext.lowercase()) }
+        // 2026-09-28 修复（根因）：patterns 传进来的是 glob 写法 "*.m4a"，
+        // 而这里用 endsWith 比较 —— ".m4a" 永远不可能以 "*.m4a" 结尾，
+        // 导致所有文件被判为不匹配（实测 m4a匹配=0），整个监听功能静默失效。
+        // 兼容两种写法：剥掉前导 "*" 再比较。
+        return exts.any { ext -> lower.endsWith(ext.lowercase().removePrefix("*")) }
     }
 
+    /**
+     * 直读：调用方已在上一次目录查询里拿到 documentId，这里只做 openInputStream。
+     *
+     * 2026-09-28 修复：旧实现 [readFromSaf] 每读一个文件都重新 query 一遍整个目录，
+     * 在 5756 个文件的目录下是 O(n^2)（约 33 万次游标移动/轮），实际从未成功返回过数据 ——
+     * 表现为「扫描有 rows 日志、UI 有当日文件计数、但上传恒为 0」。
+     */
+    private fun readFromSafDirect(treeUri: Uri, childDocId: String?, fileName: String): ByteArray? {
+        if (childDocId.isNullOrBlank()) {
+            Log.w(TAG, "No documentId cached for $fileName")
+            return null
+        }
+        return try {
+            val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId)
+            contentResolver.openInputStream(childUri)?.use { it.readBytes() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read $fileName via SAF", e)
+            null
+        }
+    }
+
+    /** 兼容保留：按文件名单独查 docId 再读（不在热路径上）。 */
     private fun readFromSaf(treeUri: Uri, fileName: String): ByteArray? {
         return try {
             val docId = DocumentsContract.getTreeDocumentId(treeUri)
@@ -381,9 +427,7 @@ class PhoneRecordingWatcherService : Service() {
                 while (c.moveToNext()) {
                     val n = if (nameIdx >= 0) c.getString(nameIdx) else continue
                     if (n == fileName && docIdIdx >= 0) {
-                        val childDocId = c.getString(docIdIdx)
-                        val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childDocId)
-                        return contentResolver.openInputStream(childUri)?.use { it.readBytes() }
+                        return readFromSafDirect(treeUri, c.getString(docIdIdx), fileName)
                     }
                 }
             }
