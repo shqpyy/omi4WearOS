@@ -88,15 +88,16 @@ class InputTextAccessibilityService : AccessibilityService() {
     /**
      * 一段正在编辑中的输入。
      *
-     * @param packageName 采集来源包名（同一 pending 内不变）
-     * @param text        该输入框的最新全量文本（会被反复覆盖）
-     * @param timestampMs 最近一次变更时间，作为落盘记录的时间戳
+     * 标题在事件发生时一次性 capture，避免 flush 时 [rootInActiveWindow]
+     * 已切换到其他 App 导致跨窗口错位。
      */
     private data class PendingCapture(
         val packageName: String,
         var text: String,
         var timestampMs: Long,
-        var eventCount: Int
+        var eventCount: Int,
+        val windowTitle: String,
+        val chatTitle: String
     )
 
     /** 静默计时器作用域；随服务销毁取消 */
@@ -161,6 +162,7 @@ class InputTextAccessibilityService : AccessibilityService() {
         }
 
         val now = System.currentTimeMillis()
+        val titleAtEvent = captureTitlesAtEvent(ev)
         synchronized(lock) {
             val existing = pending[key]
             if (existing == null) {
@@ -168,7 +170,9 @@ class InputTextAccessibilityService : AccessibilityService() {
                     packageName = pkg,
                     text = raw,
                     timestampMs = now,
-                    eventCount = 1
+                    eventCount = 1,
+                    windowTitle = titleAtEvent.first,
+                    chatTitle = titleAtEvent.second
                 )
             } else {
                 existing.text = raw
@@ -252,8 +256,8 @@ class InputTextAccessibilityService : AccessibilityService() {
                 val event = InputTextEvent(
                     packageName = capture.packageName,
                     appLabel = resolveAppLabel(capture.packageName),
-                    windowTitle = currentWindowTitle(),
-                    chatTitle = currentWindowTitle(capture.packageName),
+                    windowTitle = capture.windowTitle,
+                    chatTitle = capture.chatTitle,
                     text = text,
                     timestampMs = capture.timestampMs
                 )
@@ -375,6 +379,25 @@ class InputTextAccessibilityService : AccessibilityService() {
             Log.d(TAG, "currentWindowTitle failed: ${e.message}")
         }
         return ""
+    }
+
+    /**
+     * 在事件发生时 capture 窗口标题，避免 flush 时 [rootInActiveWindow] 已切换到其他 App。
+     *
+     * 只做安全提取：微信走专属 viewId，拿不到就留空，不做 greedy BFS。
+     */
+    private fun captureTitlesAtEvent(ev: AccessibilityEvent): Pair<String, String> {
+        val root = runCatching { rootInActiveWindow }.getOrNull()
+        val pkg = ev.packageName?.toString().orEmpty()
+
+        val chatTitle = if (pkg == "com.tencent.mm" && root != null) {
+            extractWeChatTitle(root).orEmpty()
+        } else {
+            ""
+        }
+
+        val windowTitle = if (pkg == "com.tencent.mm") chatTitle else ""
+        return windowTitle to chatTitle
     }
 
     /** 微信专属标题提取：优先命中常见聊天标题 viewId。 */
