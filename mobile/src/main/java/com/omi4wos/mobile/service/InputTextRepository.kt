@@ -78,7 +78,7 @@ class InputTextRepository private constructor(private val context: Context) {
                     out.write('\n'.code)
                 }
             }
-            Log.d(TAG, "Appended input text (${event.textLength} chars) from ${event.packageName}")
+            Log.d(TAG, "Appended input text (${event.text.length} chars) from ${event.packageName}")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to append input text event", e)
