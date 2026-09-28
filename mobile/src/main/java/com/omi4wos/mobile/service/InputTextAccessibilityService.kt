@@ -384,20 +384,55 @@ class InputTextAccessibilityService : AccessibilityService() {
     /**
      * 在事件发生时 capture 窗口标题，避免 flush 时 [rootInActiveWindow] 已切换到其他 App。
      *
-     * 只做安全提取：微信走专属 viewId，拿不到就留空，不做 greedy BFS。
+     * 微信优先走专属 viewId；若全部 miss，则遍历整棵树打全量调试日志，
+     * 用于人工定位聊天标题的真实 resource-id。
      */
     private fun captureTitlesAtEvent(ev: AccessibilityEvent): Pair<String, String> {
         val root = runCatching { rootInActiveWindow }.getOrNull()
         val pkg = ev.packageName?.toString().orEmpty()
 
         val chatTitle = if (pkg == "com.tencent.mm" && root != null) {
-            extractWeChatTitle(root).orEmpty()
+            val title = extractWeChatTitle(root).orEmpty()
+            if (title.isEmpty()) {
+                dumpWeChatTitleCandidates(root)
+            }
+            title
         } else {
             ""
         }
 
         val windowTitle = if (pkg == "com.tencent.mm") chatTitle else ""
         return windowTitle to chatTitle
+    }
+
+    /** 微信标题全量候选日志：把所有含文本的节点 resource-id/text/class 打出来 */
+    private fun dumpWeChatTitleCandidates(root: AccessibilityNodeInfo) {
+        try {
+            val queue = ArrayDeque<AccessibilityNodeInfo>()
+            queue.add(root)
+            var visited = 0
+            val candidates = mutableListOf<String>()
+            while (queue.isNotEmpty() && visited < 120) {
+                val node = queue.removeFirst()
+                visited++
+                val text = node.text?.toString()?.trim()
+                val rid = node.viewIdResourceName?.toString().orEmpty()
+                val cls = node.className?.toString()?.trim().orEmpty()
+                if (!text.isNullOrEmpty() && text.length in 2..40) {
+                    candidates.add("$cls|$rid|${text.take(24)}")
+                }
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let { queue.add(it) }
+                }
+            }
+            if (candidates.isNotEmpty()) {
+                Log.d(TAG, "wechatTitleCandidates count=${candidates.size} sample=" + candidates.take(8).joinToString(" || "))
+            } else {
+                Log.d(TAG, "wechatTitleCandidates count=0")
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "dumpWeChatTitleCandidates failed: ${e.message}")
+        }
     }
 
     /** 微信专属标题提取：优先命中常见聊天标题 viewId。 */
