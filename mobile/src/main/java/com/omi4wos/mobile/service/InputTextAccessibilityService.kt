@@ -154,7 +154,7 @@ class InputTextAccessibilityService : AccessibilityService() {
 
         val key = buildFieldKey(ev, pkg)
         if (pkg == "com.tencent.mm") {
-            Log.d(TAG, "wechatChatId key= windowId=${ev.windowId} viewId=${runCatching { ev.source?.viewIdResourceName }.getOrNull()}")
+            Log.d(TAG, "wechatChatId key=$key windowId=${ev.windowId} viewId=${runCatching { ev.source?.viewIdResourceName }.getOrNull()}")
         }
 
         // 输入框被清空：通常是消息已发送 / 手动清空，应尽快收口这一段，
