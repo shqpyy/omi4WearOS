@@ -253,13 +253,16 @@ class InputTextAccessibilityService : AccessibilityService() {
                     return@launch
                 }
 
-                val chatId = key.substringAfter('#').substringBefore('#')
+                // windowId = key 中 pkg#windowId#viewId 的第二段。
+                // ⚠️ 这是系统窗口编号，不是会话标识（窗口销毁重建即变，号码还会被复用）。
+                val windowId = key.substringAfter('#').substringBefore('#')
                 val event = InputTextEvent(
                     packageName = capture.packageName,
+                    appLabel = InputTextEvent.resolveAppLabel(applicationContext, capture.packageName),
                     text = text,
                     timestampMs = capture.timestampMs,
                     chatTitle = capture.chatTitle,
-                    chatId = chatId
+                    windowId = windowId
                 )
                 repository.append(event)
                 Log.d(
@@ -475,21 +478,7 @@ class InputTextAccessibilityService : AccessibilityService() {
         return null
     }
 
-    /** 包名 → 应用显示名；失败回落包名。 */
-    private fun resolveAppLabel(pkg: String): String {
-        return try {
-            val pm = applicationContext.packageManager
-            val appInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                pm.getApplicationInfo(pkg, PackageManager.ApplicationInfoFlags.of(0))
-            } else {
-                @Suppress("DEPRECATION")
-                pm.getApplicationInfo(pkg, 0)
-            }
-            pm.getApplicationLabel(appInfo).toString()
-        } catch (_: Exception) {
-            pkg
-        }
-    }
+    // resolveAppLabel 已挪至 InputTextEvent.resolveAppLabel（与字段定义放一起）
 }
 
 
