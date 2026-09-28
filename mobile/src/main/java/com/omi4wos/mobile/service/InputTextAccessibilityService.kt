@@ -153,6 +153,9 @@ class InputTextAccessibilityService : AccessibilityService() {
         val raw = extractText(ev) ?: return
 
         val key = buildFieldKey(ev, pkg)
+        if (pkg == "com.tencent.mm") {
+            Log.d(TAG, "wechatChatId key= windowId=${ev.windowId} viewId=${runCatching { ev.source?.viewIdResourceName }.getOrNull()}")
+        }
 
         // 输入框被清空：通常是消息已发送 / 手动清空，应尽快收口这一段，
         // 否则会把「上一条已发送的消息」和「下一条正在打的」并成一条。
@@ -491,4 +494,5 @@ class InputTextAccessibilityService : AccessibilityService() {
         }
     }
 }
+
 
