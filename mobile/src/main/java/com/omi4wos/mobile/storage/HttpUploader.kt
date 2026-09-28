@@ -95,7 +95,12 @@ class HttpUploader(
         }
 
         val audioDir = getSpeechAudioDir(context)
-        val binFile = File(audioDir, uploadName)
+        // 2026-09-28 修复：通话录音原始文件名含 "@" 和空格（如「钱总@158 2814 2103_20260928170517.m4a」），
+        // 华为等 ROM 上 File() 直接落盘会抛异常 → 这里返回 false，请求根本发不出去。
+        // 仅本地临时落盘名做安全化；上传用的 multipart filename 仍是 uploadName（原始名），
+        // 服务端 source=phone 分支照旧按原始名存盘/去重，transcribe.py 的 CALL_RE 不受影响。
+        val safeName = uploadName.replace(Regex("[\\\\/:*?\"<>|\\s@]"), "_")
+        val binFile = File(audioDir, safeName)
 
         // 1. 把音频字节持久化到 filesDir/speech_audio/ (先落盘, 再上传, 上传失败也不丢)
         try {

@@ -23,6 +23,8 @@ import com.omi4wos.mobile.omi.OmiConfig
 import com.omi4wos.mobile.service.AppLog
 import com.omi4wos.mobile.service.CrashLogger
 import com.omi4wos.mobile.service.InputTextUploadWorker
+import com.omi4wos.mobile.service.PhoneRecordingWatcherService
+import com.omi4wos.mobile.service.RecordingWatcherWorker
 import com.omi4wos.mobile.service.UploadRetryWorker
 import com.omi4wos.mobile.service.WatchReceiverService
 import com.omi4wos.mobile.ui.MobileApp
@@ -85,6 +87,15 @@ class MainActivity : ComponentActivity() {
             ContextCompat.startForegroundService(
                 this, Intent(this, WatchReceiverService::class.java)
             )
+            // 2026-09-28 修复：此前 MainActivity 漏了启动通话录音监听服务，
+            // 导致配置里 pw_enabled=true 但服务从未被拉起，录音扫描/上传全程不执行。
+            // 无条件启动：服务内部 startScanLoop() 会自行读取配置，enabled=false 时自我停止，无副作用。
+            try {
+                PhoneRecordingWatcherService.start(this)
+                RecordingWatcherWorker.schedule(this)
+            } catch (t: Throwable) {
+                AppLog.e(TAG, "启动通话录音监听失败", t)
+            }
             scheduleUploadRetry()
             scheduleInputTextUpload()
             requestBatteryOptimizationExemption()
