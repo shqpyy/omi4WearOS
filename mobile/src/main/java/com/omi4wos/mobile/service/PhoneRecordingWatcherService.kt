@@ -173,7 +173,16 @@ class PhoneRecordingWatcherService : Service() {
     }
 
     private fun startScanLoop() {
-        scanJob?.cancel()
+        // 2026-09-28 修复：原实现无条件 scanJob?.cancel() 再重启。
+        // MainActivity 启动 与 RecordingWatcherWorker(15min) 都会调 start()，
+        // 每次 onStartCommand(ACTION_START) 都取消上一个 job → 被取消的协程在
+        // catch(Exception) 里吞掉 JobCancellationException 并在已取消状态下
+        // delay() 立即再抛，循环彻底退出；随后又被重新拉起，形成
+        // 「启动→取消→退出→启动」死循环，扫描永远跑不完一轮（实测 logcat:
+        // PhoneWatcher Scan loop error / JobCancellationException）。
+        // 修复：① 已在跑就不重启；② CancellationException 必须原样抛出，
+        // 不能被普通 catch 吞掉（Kotlin 协程铁律）。
+        if (scanJob?.isActive == true) return
         scanJob = serviceScope.launch {
             Log.i(TAG, "Phone watcher scan loop started")
             while (true) {
@@ -189,6 +198,8 @@ class PhoneRecordingWatcherService : Service() {
 
                     val intervalSec = (config.phoneWatcher.scanIntervalMin * 60).coerceIn(15, 3600)
                     delay(intervalSec * 1000L)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.e(TAG, "Scan loop error", e)
                     delay(60_000)
