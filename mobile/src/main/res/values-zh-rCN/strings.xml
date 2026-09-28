@@ -136,7 +136,8 @@
     <string name='input_text_accessibility_description'>采集你在其他 App 中输入的文本并保存到本地，自动跳过密码框。仅在你开启后才会自动上传。</string>
     <string name='input_text_filter_short_ascii'>过滤短 ASCII 噪声</string>
     <string name='input_text_filter_short_ascii_max_length'>短 ASCII 最大长度</string>
-    <string name='input_text_upload_interval'>上传间隔（分钟）</string>
+    <string name='input_text_upload_interval'>上传间隔（分钟，最小 15）</string>
+    <string name='input_text_upload_interval_desc'>系统最小周期为 15 分钟；低于 15 的值会被自动提升到 15。</string>
     <string name='input_text_test_now'>立即上传测试</string>
     <string name='input_text_next_run'>下次自动上传：%1$s</string>
     <string name='input_text_next_run_none'>下次自动上传：未排程</string>

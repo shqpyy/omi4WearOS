@@ -136,7 +136,8 @@
     <string name='input_text_accessibility_description'>Captures text you type in other apps and saves it locally. Password fields are skipped. Upload happens only if you enable it.</string>
     <string name='input_text_filter_short_ascii'>Filter short ASCII noise</string>
     <string name='input_text_filter_short_ascii_max_length'>Short ASCII max length</string>
-    <string name='input_text_upload_interval'>Upload interval (minutes)</string>
+    <string name='input_text_upload_interval'>Upload interval (minutes, min 15)</string>
+    <string name='input_text_upload_interval_desc'>Android&#8217;s minimum periodic interval is 15 minutes; shorter values are raised to 15 automatically.</string>
     <string name='phone_watcher_trigger_now'>Trigger scan now</string>
     <string name='location_test_now'>Test upload now</string>
     <string name='input_text_test_now'>Test upload now</string>

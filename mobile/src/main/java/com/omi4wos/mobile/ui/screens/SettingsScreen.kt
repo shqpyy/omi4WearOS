@@ -503,11 +503,13 @@ private fun InputTextCard(
 
             Spacer(modifier = Modifier.height(8.dp))
             // 上传间隔：滑块（分钟），松手即保存，不再需要保存按钮。
+            // WorkManager 周期任务硬下限 15 分钟，低于此值的设置会被系统提升到 15，
+            // 所以滑块从 15 起步，避免用户设出"看着生效其实无效"的假值。
             MinuteSlider(
                 label = context.getString(R.string.input_text_upload_interval),
-                desc = "",
+                desc = context.getString(R.string.input_text_upload_interval_desc),
                 valueMin = uiState.inputTextUploadIntervalMin,
-                range = 1..120,
+                range = 15..240,
                 enabled = uiState.inputTextUploadEnabled,
                 onValueChange = onUploadIntervalChange
             )

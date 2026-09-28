@@ -118,7 +118,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 inputTextQuietMs = config.inputText.quietMs,
                 inputTextFilterShortAscii = config.inputText.filterShortAscii,
                 inputTextFilterShortAsciiMaxLength = config.inputText.filterShortAsciiMaxLength,
-                inputTextUploadIntervalMin = config.inputText.uploadIntervalMin,
+                // 回显真实生效值：历史配置可能是 1~14 的假值，按 15 显示才与排程一致。
+                inputTextUploadIntervalMin = config.inputText.uploadIntervalMin.coerceAtLeast(15),
                 inputTextNextRunAt = InputTextUploadWorker.nextRunHint(getApplication()),
                 language = config.language
             )
@@ -309,7 +310,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun updateInputTextUploadIntervalMin(value: Int) {
-        val min = value.coerceIn(1, 120)
+        // 15 = WorkManager 周期任务硬下限；240 = 4 小时的宽松上限。
+        val min = value.coerceIn(15, 240)
         _uiState.value = _uiState.value.copy(inputTextUploadIntervalMin = min)
         viewModelScope.launch {
             persist()
