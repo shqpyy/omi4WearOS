@@ -4,7 +4,6 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.omi4wos.mobile.omi.OmiConfig
@@ -129,7 +128,7 @@ class InputTextAccessibilityService : AccessibilityService() {
                 flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
             }
         }
-        Log.i(TAG, "Accessibility service connected")
+        AppLog.i(TAG, "Accessibility service connected")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -144,7 +143,7 @@ class InputTextAccessibilityService : AccessibilityService() {
 
         // 过滤密码框
         if (isPasswordField(ev)) {
-            Log.d(TAG, "Skipped password field in $pkg")
+            AppLog.i(TAG, "Skipped password field in $pkg")
             return
         }
 
@@ -201,7 +200,7 @@ class InputTextAccessibilityService : AccessibilityService() {
     private fun currentQuietMs(): Long = try {
         runBlocking { OmiConfig(applicationContext).getConfig().inputText.quietMs }
     } catch (e: Exception) {
-        Log.w(TAG, "Read quietMs failed, fallback to $QUIET_MS: ${e.message}")
+        AppLog.w(TAG, "Read quietMs failed, fallback to $QUIET_MS: ${e.message}")
         QUIET_MS
     }
 
@@ -232,7 +231,7 @@ class InputTextAccessibilityService : AccessibilityService() {
 
         val text = capture.text.trim().take(MAX_TEXT_LENGTH)
         if (text.length < MIN_TEXT_LENGTH) {
-            Log.d(TAG, "Drop short capture ($reason, ${text.length} chars)")
+            AppLog.i(TAG, "Drop short capture ($reason, ${text.length} chars)")
             return
         }
 
@@ -240,7 +239,7 @@ class InputTextAccessibilityService : AccessibilityService() {
             try {
                 val config = OmiConfig(applicationContext).getConfig()
                 if (!config.inputText.enabled) {
-                    Log.d(TAG, "Collect disabled — dropping capture")
+                    AppLog.i(TAG, "Collect disabled — dropping capture")
                     return@launch
                 }
                 // 客户端过滤：短 ASCII 噪声
@@ -249,7 +248,7 @@ class InputTextAccessibilityService : AccessibilityService() {
                     text.length <= (configForFilter.inputText.filterShortAsciiMaxLength.coerceIn(1, 20).takeIf { it > 0 } ?: 3) &&
                     text.all { it in 'a'..'z' }
                 if (filtered) {
-                    Log.d(TAG, "Filtered short ASCII: $text")
+                    AppLog.i(TAG, "Filtered short ASCII: $text")
                     return@launch
                 }
 
@@ -265,13 +264,13 @@ class InputTextAccessibilityService : AccessibilityService() {
                     windowId = windowId
                 )
                 repository.append(event)
-                Log.d(
+                AppLog.i(
                     TAG,
                     "Flushed capture ($reason): ${capture.eventCount} event(s) merged -> " +
                         "${text.length} chars from ${capture.packageName}"
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to persist input text event", e)
+                AppLog.e(TAG, "Failed to persist input text event", e)
             }
         }
     }
@@ -302,7 +301,7 @@ class InputTextAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        Log.w(TAG, "Accessibility service interrupted")
+        AppLog.w(TAG, "Accessibility service interrupted")
         flushAll(reason = "interrupt")
     }
 
@@ -345,7 +344,7 @@ class InputTextAccessibilityService : AccessibilityService() {
                 depth++
             }
         } catch (e: Exception) {
-            Log.d(TAG, "isPasswordField probe failed: ${e.message}")
+            AppLog.i(TAG, "isPasswordField probe failed: ${e.message}")
         } finally {
             runCatching { @Suppress("DEPRECATION") source.recycle() }
         }
@@ -379,7 +378,7 @@ class InputTextAccessibilityService : AccessibilityService() {
                 }
             }
         } catch (e: Exception) {
-            Log.d(TAG, "currentWindowTitle failed: ${e.message}")
+            AppLog.i(TAG, "currentWindowTitle failed: ${e.message}")
         }
         return ""
     }
@@ -429,12 +428,12 @@ class InputTextAccessibilityService : AccessibilityService() {
                 }
             }
             if (candidates.isNotEmpty()) {
-                Log.d(TAG, "wechatTitleCandidates count=${candidates.size} sample=" + candidates.take(8).joinToString(" || "))
+                AppLog.i(TAG, "wechatTitleCandidates count=${candidates.size} sample=" + candidates.take(8).joinToString(" || "))
             } else {
-                Log.d(TAG, "wechatTitleCandidates count=0")
+                AppLog.i(TAG, "wechatTitleCandidates count=0")
             }
         } catch (e: Exception) {
-            Log.d(TAG, "dumpWeChatTitleCandidates failed: ${e.message}")
+            AppLog.i(TAG, "dumpWeChatTitleCandidates failed: ${e.message}")
         }
     }
 
@@ -457,9 +456,9 @@ class InputTextAccessibilityService : AccessibilityService() {
                 val count = nodes?.size ?: 0
                 if (count > 0) {
                     val samples = nodes?.take(3)?.map { it.text?.toString()?.trim()?.take(20) ?: "" }?.joinToString(" | ")
-                    Log.d(TAG, "wechatTitle hit viewId=$viewId count=$count samples=$samples")
+                    AppLog.i(TAG, "wechatTitle hit viewId=$viewId count=$count samples=$samples")
                 } else {
-                    Log.d(TAG, "wechatTitle miss viewId=$viewId")
+                    AppLog.i(TAG, "wechatTitle miss viewId=$viewId")
                 }
 
                 nodes?.forEach { node ->
@@ -471,7 +470,7 @@ class InputTextAccessibilityService : AccessibilityService() {
                     runCatching { node.recycle() }
                 }
             } catch (e: Exception) {
-                Log.d(TAG, "extractWeChatTitle failed for $viewId: ${e.message}")
+                AppLog.i(TAG, "extractWeChatTitle failed for $viewId: ${e.message}")
             }
         }
 

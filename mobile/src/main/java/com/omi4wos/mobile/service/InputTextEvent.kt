@@ -83,9 +83,11 @@ data class InputTextEvent(
         }
 
         /**
-         * 包名 → 应用显示名；失败回落包名。
+         * 包名 → 应用显示名（如 com.tencent.mm → 「微信」）；查询失败回落包名。
          *
-         * 从 [InputTextAccessibilityService] 挪到这里，与事件字段定义放一起。
+         * ⚠️ 依赖 AndroidManifest 里的 `<queries>` 声明：
+         * Android 11+ 有包可见性限制，未声明时 `getApplicationInfo` 会抛
+         * `NameNotFoundException`，导致此处静默回落成包名（曾实测到该现象）。
          */
         fun resolveAppLabel(context: Context, pkg: String): String {
             return try {

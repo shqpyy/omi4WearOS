@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+        Android 11+ 包可见性：未声明的包会让 PackageManager.getApplicationInfo 抛异常，
+        导致 InputTextEvent.resolveAppLabel 回落成包名（com.tencent.mm 而非「微信」）。
+        声明 MAIN/LAUNCHER intent 后即可查询所有带启动图标的应用。
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <!-- Internet for HTTP / S3 uploads -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
