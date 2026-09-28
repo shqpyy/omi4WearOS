@@ -85,10 +85,13 @@ class InputTextUploadWorker(
             return try {
                 val infos = WorkManager.getInstance(context)
                     .getWorkInfosForUniqueWork(WORK_NAME)
-                    .get()   // 已完成的 Future，立刻返回；查询很快，不会卡主线程
+                    .get()
                 val info = infos.firstOrNull()
-                if (info == null || info.state != WorkInfo.State.ENQUEUED) null
-                else info.nextScheduleTimeMillis.takeIf { it > 0L }
+                if (info == null || info.state == WorkInfo.State.CANCELLED) return null
+                val next = info.nextScheduleTimeMillis
+                if (next > 0L) return next
+                // WorkManager 偶有返回 0 的情况，按最小间隔估一个，避免 UI 显示"未知"。
+                System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(MIN_INTERVAL_MINUTES)
             } catch (e: Exception) {
                 Log.w(TAG, "nextRunHint failed", e)
                 null
