@@ -76,6 +76,18 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // 「立即上传」等触发操作的统一反馈：结果一到就弹 Snackbar，然后清空一次性字段。
+    androidx.compose.runtime.LaunchedEffect(uiState.triggerResult) {
+        val msg = uiState.triggerResult ?: return@LaunchedEffect
+        val text = when {
+            msg.startsWith("error") -> context.getString(R.string.trigger_failed, msg.removePrefix("error: "))
+            msg == "ok" -> context.getString(R.string.trigger_done, "")
+            else -> context.getString(R.string.trigger_done, msg)
+        }
+        snackbarHostState.showSnackbar(text)
+        viewModel.clearTriggerResult()
+    }
+
     // SAF 选目录启动器
     val pickDirLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -96,6 +108,7 @@ fun SettingsScreen(
         }
     }
 
+    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -222,8 +235,15 @@ fun SettingsScreen(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+    }
 
-        SnackbarHost(hostState = snackbarHostState)
+    // Snackbar 固定在屏幕底部，浮在滚动内容之上，避免被长列表顶到看不见。
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier
+            .align(androidx.compose.ui.Alignment.BottomCenter)
+            .padding(bottom = 24.dp)
+    )
     }
 }
 
@@ -515,6 +535,7 @@ private fun InputTextCard(
             )
 
             Spacer(modifier = Modifier.height(12.dp))
+            // 立即上传：把本地队列 POST 到 /input-text。点击只负责派发，反馈由 triggerResult → Snackbar 统一给出。
             TextButton(
                 onClick = onTriggerNow,
                 modifier = Modifier.fillMaxWidth()
@@ -960,6 +981,7 @@ private fun PhoneWatcherCard(
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
+                // 立即上传：扫描录音目录并上传新文件。反馈由 triggerResult → Snackbar 统一给出。
                 TextButton(
                     onClick = onTriggerNow,
                     modifier = Modifier.fillMaxWidth()
@@ -1019,6 +1041,7 @@ private fun LocationSettingsCard(
                     onValueChange = onIntervalChange
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+                // 立即上传：抓一次定位并上报。反馈由 triggerResult → Snackbar 统一给出。
                 TextButton(
                     onClick = onTriggerNow,
                     modifier = Modifier.fillMaxWidth()

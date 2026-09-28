@@ -138,9 +138,12 @@
     <string name='input_text_filter_short_ascii_max_length'>Short ASCII max length</string>
     <string name='input_text_upload_interval'>Upload interval (minutes, min 15)</string>
     <string name='input_text_upload_interval_desc'>Android&#8217;s minimum periodic interval is 15 minutes; shorter values are raised to 15 automatically.</string>
-    <string name='phone_watcher_trigger_now'>Trigger scan now</string>
-    <string name='location_test_now'>Test upload now</string>
-    <string name='input_text_test_now'>Test upload now</string>
+    <string name='phone_watcher_trigger_now'>Upload now</string>
+    <string name='location_test_now'>Upload now</string>
+    <string name='input_text_test_now'>Upload now</string>
+    <string name='trigger_running'>Uploading…</string>
+    <string name='trigger_done'>Done: %1$s</string>
+    <string name='trigger_failed'>Failed: %1$s</string>
     <string name='input_text_next_run'>Next auto-upload: %1$s</string>
     <string name='input_text_next_run_none'>Next auto-upload: not scheduled</string>
 </resources>

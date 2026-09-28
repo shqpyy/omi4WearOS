@@ -64,6 +64,8 @@ data class SettingsUiState(
     val inputTextUploadIntervalMin: Int = 30,
     /** 下次自动上传时间（epoch millis）；null = 暂时取不到（未启用/未排程）。 */
     val inputTextNextRunAt: Long? = null,
+    /** 触发操作的结果文案；非 null 时 UI 弹 Toast 后清空。 */
+    val triggerResult: String? = null,
 
     // 语言（system / en / zh-CN）
     val language: String = OmiConfig.DEFAULT_LANGUAGE,
@@ -327,35 +329,53 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun triggerPhoneWatcherNow() {
         viewModelScope.launch {
-            try {
+            val result = try {
                 val context = getApplication<Application>()
                 PhoneRecordingWatcherService.start(context)
                 RecordingWatcherWorker.schedule(context)
+                "ok"
             } catch (e: Exception) {
                 Log.e(TAG, "triggerPhoneWatcherNow failed", e)
+                "error: " + (e.message ?: e.javaClass.simpleName)
             }
+            Log.i(TAG, "triggerPhoneWatcherNow result: " + result)
+            _uiState.value = _uiState.value.copy(triggerResult = result)
         }
     }
 
     fun triggerLocationNow() {
         viewModelScope.launch {
-            try {
+            val result = try {
                 LocationUploader.uploadNow(getApplication())
+                "ok"
             } catch (e: Exception) {
                 Log.e(TAG, "triggerLocationNow failed", e)
+                "error: " + (e.message ?: e.javaClass.simpleName)
             }
+            Log.i(TAG, "triggerLocationNow result: " + result)
+            _uiState.value = _uiState.value.copy(triggerResult = result)
         }
     }
 
     fun triggerInputTextUploadNow() {
         viewModelScope.launch {
-            try {
+            val result = try {
                 val context = getApplication<Application>()
-                val result = com.omi4wos.mobile.service.runInputTextUpload(context)
-                Log.i(TAG, "triggerInputTextUploadNow result: $result")
+                com.omi4wos.mobile.service.runInputTextUpload(context)
             } catch (e: Exception) {
                 Log.e(TAG, "triggerInputTextUploadNow failed", e)
+                "error: " + (e.message ?: e.javaClass.simpleName)
             }
+            Log.i(TAG, "triggerInputTextUploadNow result: " + result)
+            _uiState.value = _uiState.value.copy(triggerResult = result)
+            refreshNextRunHint()
+        }
+    }
+
+    /** UI 弹完 Toast 后调用，清空一次性结果。 */
+    fun clearTriggerResult() {
+        if (_uiState.value.triggerResult != null) {
+            _uiState.value = _uiState.value.copy(triggerResult = null)
         }
     }
 

@@ -138,7 +138,12 @@
     <string name='input_text_filter_short_ascii_max_length'>短 ASCII 最大长度</string>
     <string name='input_text_upload_interval'>上传间隔（分钟，最小 15）</string>
     <string name='input_text_upload_interval_desc'>系统最小周期为 15 分钟；低于 15 的值会被自动提升到 15。</string>
-    <string name='input_text_test_now'>立即上传测试</string>
+    <string name='input_text_test_now'>立即上传</string>
     <string name='input_text_next_run'>下次自动上传：%1$s</string>
     <string name='input_text_next_run_none'>下次自动上传：未排程</string>
+    <string name='phone_watcher_trigger_now'>立即上传</string>
+    <string name='location_test_now'>立即上传</string>
+    <string name='trigger_running'>正在上传…</string>
+    <string name='trigger_done'>完成：%1$s</string>
+    <string name='trigger_failed'>失败：%1$s</string>
 </resources>
