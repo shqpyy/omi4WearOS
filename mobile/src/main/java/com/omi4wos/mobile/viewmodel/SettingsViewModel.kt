@@ -62,6 +62,8 @@ data class SettingsUiState(
     val inputTextFilterShortAscii: Boolean = false,
     val inputTextFilterShortAsciiMaxLength: Int = 3,
     val inputTextUploadIntervalMin: Int = 30,
+    /** 下次自动上传时间（epoch millis）；null = 暂时取不到（未启用/未排程）。 */
+    val inputTextNextRunAt: Long? = null,
 
     // 语言（system / en / zh-CN）
     val language: String = OmiConfig.DEFAULT_LANGUAGE,
@@ -117,9 +119,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 inputTextFilterShortAscii = config.inputText.filterShortAscii,
                 inputTextFilterShortAsciiMaxLength = config.inputText.filterShortAsciiMaxLength,
                 inputTextUploadIntervalMin = config.inputText.uploadIntervalMin,
+                inputTextNextRunAt = InputTextUploadWorker.nextRunHint(getApplication()),
                 language = config.language
             )
         }
+    }
+
+    /** 刷新"下次上传时间"展示（排程变更后调用）。 */
+    private fun refreshNextRunHint() {
+        _uiState.value = _uiState.value.copy(
+            inputTextNextRunAt = InputTextUploadWorker.nextRunHint(getApplication())
+        )
     }
 
     // ---- 切换存储方案 ----
@@ -252,10 +262,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             persist()
             val context = getApplication<Application>()
             if (value && _uiState.value.inputTextUploadEnabled) {
-                InputTextUploadWorker.schedule(context)
+                InputTextUploadWorker.schedule(
+                    context, _uiState.value.inputTextUploadIntervalMin.toLong()
+                )
             } else {
                 InputTextUploadWorker.cancel(context)
             }
+            refreshNextRunHint()
         }
     }
 
@@ -265,10 +278,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             persist()
             val context = getApplication<Application>()
             if (value && _uiState.value.inputTextEnabled) {
-                InputTextUploadWorker.schedule(context)
+                InputTextUploadWorker.schedule(
+                    context, _uiState.value.inputTextUploadIntervalMin.toLong()
+                )
             } else {
                 InputTextUploadWorker.cancel(context)
             }
+            refreshNextRunHint()
         }
     }
 
@@ -295,7 +311,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun updateInputTextUploadIntervalMin(value: Int) {
         val min = value.coerceIn(1, 120)
         _uiState.value = _uiState.value.copy(inputTextUploadIntervalMin = min)
-        viewModelScope.launch { persist() }
+        viewModelScope.launch {
+            persist()
+            // 间隔变更后立刻用新参数重排程（UPDATE 策略会覆盖旧的周期任务），
+            // 否则用户在设置页改的分钟数要等下次装包才生效。
+            val context = getApplication<Application>()
+            if (_uiState.value.inputTextEnabled && _uiState.value.inputTextUploadEnabled) {
+                InputTextUploadWorker.schedule(context, min.toLong())
+            }
+            refreshNextRunHint()
+        }
     }
 
     fun triggerPhoneWatcherNow() {

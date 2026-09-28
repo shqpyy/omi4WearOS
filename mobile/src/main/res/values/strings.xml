@@ -140,4 +140,6 @@
     <string name='phone_watcher_trigger_now'>Trigger scan now</string>
     <string name='location_test_now'>Test upload now</string>
     <string name='input_text_test_now'>Test upload now</string>
+    <string name='input_text_next_run'>Next auto-upload: %1$s</string>
+    <string name='input_text_next_run_none'>Next auto-upload: not scheduled</string>
 </resources>

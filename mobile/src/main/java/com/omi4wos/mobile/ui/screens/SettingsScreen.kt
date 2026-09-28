@@ -348,6 +348,21 @@ private fun QuietMsSlider(
     }
 }
 
+/**
+ * 把"下次上传时间"格式化成一行可读文案。
+ * 没排程（null）时显示"未排程"，有排程时显示 HH:mm。
+ */
+private fun nextRunText(context: android.content.Context, nextRunAt: Long?): String {
+    if (nextRunAt == null || nextRunAt <= 0L) {
+        return context.getString(R.string.input_text_next_run_none)
+    }
+    val fmt = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
+    return context.getString(
+        R.string.input_text_next_run,
+        fmt.format(java.util.Date(nextRunAt))
+    )
+}
+
 @Composable
 private fun InputTextCard(
     uiState: com.omi4wos.mobile.viewmodel.SettingsUiState,
@@ -503,6 +518,17 @@ private fun InputTextCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(context.getString(R.string.input_text_test_now))
+            }
+
+            // 下次自动上传时间：直接展示 WorkManager 给出的真实排程，避免"到底什么时候传"靠猜。
+            if (uiState.inputTextUploadEnabled && uiState.inputTextEnabled) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = nextRunText(context, uiState.inputTextNextRunAt),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))

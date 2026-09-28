@@ -220,7 +220,9 @@ class MainActivity : ComponentActivity() {
             .build()
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             UploadRetryWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            // UPDATE：与输入文本侧同因修复 —— KEEP 会让新 APK 的排程被旧任务顶掉，
+            // 导致「装了新版后音频重试不再执行」。
+            ExistingPeriodicWorkPolicy.UPDATE,
             request
         )
         Log.i(TAG, "Upload retry worker scheduled (15 min, network-constrained)")

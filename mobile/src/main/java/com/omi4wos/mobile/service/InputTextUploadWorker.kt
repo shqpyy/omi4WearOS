@@ -8,6 +8,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.omi4wos.mobile.omi.OmiConfig
@@ -33,12 +34,26 @@ class InputTextUploadWorker(
     companion object {
         const val WORK_NAME = "omi4wos_input_text_upload"
         private const val TAG = "InputTextUploadWorker"
-        private const val INTERVAL_MINUTES = 15L
 
-        /** 注册/刷新周期任务（网络可用时才跑）。 */
-        fun schedule(context: Context) {
+        /** 默认间隔（分钟）。用户可在设置页 1~120 分钟区间调整。 */
+        const val DEFAULT_INTERVAL_MINUTES = 30L
+
+        /** WorkManager 周期任务硬性下限：低于 15 分钟会被系统拒绝。 */
+        private const val MIN_INTERVAL_MINUTES = 15L
+
+        /**
+         * 注册/刷新周期任务（网络可用时才跑）。
+         *
+         * [intervalMinutes] 由调用方传入（设置页读配置后传入）；缺省用 [DEFAULT_INTERVAL_MINUTES]。
+         *
+         * ★ 必须用 [ExistingPeriodicWorkPolicy.UPDATE]：
+         * 旧版本用 KEEP，导致装新 APK 时同名任务已存在 → 新参数被整体丢弃 →
+         * Worker 类已被新包覆盖却仍在跑旧 WorkSpec，上传链路彻底静默失效。
+         */
+        fun schedule(context: Context, intervalMinutes: Long = DEFAULT_INTERVAL_MINUTES) {
+            val configured = intervalMinutes.coerceAtLeast(MIN_INTERVAL_MINUTES)
             val request = PeriodicWorkRequestBuilder<InputTextUploadWorker>(
-                INTERVAL_MINUTES, TimeUnit.MINUTES
+                configured, TimeUnit.MINUTES
             )
                 .setConstraints(
                     Constraints.Builder()
@@ -49,15 +64,35 @@ class InputTextUploadWorker(
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request
             )
-            Log.i(TAG, "Scheduled input text upload ($INTERVAL_MINUTES min, network-constrained)")
+            Log.i(TAG, "Scheduled input text upload ($configured min, network-constrained, UPDATE)")
         }
 
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
             Log.i(TAG, "Cancelled input text upload")
+        }
+
+        /**
+         * 查询下一次自动上传的大致时间，用于设置页展示。
+         *
+         * WorkManager 的 nextScheduleTimeMillis 是系统给出的真实排程（含周期抖动），
+         * 比"当前时间 + 间隔"这种自算值可信。取不到时返回 null，UI 显示"未知"。
+         */
+        fun nextRunHint(context: Context): Long? {
+            return try {
+                val infos = WorkManager.getInstance(context)
+                    .getWorkInfosForUniqueWork(WORK_NAME)
+                    .get()   // 已完成的 Future，立刻返回；查询很快，不会卡主线程
+                val info = infos.firstOrNull()
+                if (info == null || info.state != WorkInfo.State.ENQUEUED) null
+                else info.nextScheduleTimeMillis.takeIf { it > 0L }
+            } catch (e: Exception) {
+                Log.w(TAG, "nextRunHint failed", e)
+                null
+            }
         }
     }
 
