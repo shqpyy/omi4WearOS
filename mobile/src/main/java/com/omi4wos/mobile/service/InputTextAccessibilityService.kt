@@ -416,6 +416,14 @@ class InputTextAccessibilityService : AccessibilityService() {
                     runCatching { root.findAccessibilityNodeInfosByViewId(viewId) }.getOrNull()
                 } else null ?: continue
 
+                val count = nodes?.size ?: 0
+                if (count > 0) {
+                    val samples = nodes?.take(3)?.map { it.text?.toString()?.trim()?.take(20) ?: "" }?.joinToString(" | ")
+                    Log.d(TAG, "wechatTitle hit viewId=$viewId count=$count samples=$samples")
+                } else {
+                    Log.d(TAG, "wechatTitle miss viewId=$viewId")
+                }
+
                 nodes?.forEach { node ->
                     val text = node.text?.toString()?.trim()
                     if (!text.isNullOrEmpty() && text.length in 2..40) {
