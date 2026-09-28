@@ -153,9 +153,6 @@ class InputTextAccessibilityService : AccessibilityService() {
         val raw = extractText(ev) ?: return
 
         val key = buildFieldKey(ev, pkg)
-        if (pkg == "com.tencent.mm") {
-            Log.d(TAG, "wechatChatId key=$key windowId=${ev.windowId} viewId=${runCatching { ev.source?.viewIdResourceName }.getOrNull()}")
-        }
 
         // 输入框被清空：通常是消息已发送 / 手动清空，应尽快收口这一段，
         // 否则会把「上一条已发送的消息」和「下一条正在打的」并成一条。
@@ -256,13 +253,13 @@ class InputTextAccessibilityService : AccessibilityService() {
                     return@launch
                 }
 
+                val chatId = key.substringAfter('#').substringBefore('#')
                 val event = InputTextEvent(
                     packageName = capture.packageName,
-                    appLabel = resolveAppLabel(capture.packageName),
-                    windowTitle = capture.windowTitle,
-                    chatTitle = capture.chatTitle,
                     text = text,
-                    timestampMs = capture.timestampMs
+                    timestampMs = capture.timestampMs,
+                    chatTitle = capture.chatTitle,
+                    chatId = chatId
                 )
                 repository.append(event)
                 Log.d(
